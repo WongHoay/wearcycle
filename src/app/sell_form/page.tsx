@@ -1,42 +1,14 @@
 "use client";
 import React, { useState } from "react";
+import axios from "axios";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
-import { db } from "../../firebaseConfig"; // Adjust path if needed
+import { db } from "../../firebaseConfig";
 import { collection, addDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../../firebaseConfig"; // Make sure you export storage from your config
 
-const styles = {
-    formGroup: {
-        marginBottom: "1.5rem",
-    },
-    label: {
-        display: "block",
-        marginBottom: "0.5rem",
-        fontWeight: 500,
-    },
-    requiredLabel: {
-        color: "#dc3545",
-    },
-    imageUpload: {
-        border: "2px dashed #e9ecef",
-        borderRadius: "0.5rem",
-        padding: "2rem",
-        textAlign: "center" as const,
-        cursor: "pointer",
-        transition: "border-color 0.3s ease",
-    },
-    errorMessage: {
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        color: "#dc3545",
-        marginTop: "0.5rem",
-        fontSize: "0.875rem",
-    },
-};
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dez1qts8e/upload";
+const CLOUDINARY_UPLOAD_PRESET = "unsigned_preset";
 
 const sizeOptions = [
     "XXS / EU44 / UK34 / US34",
@@ -73,17 +45,17 @@ const SellFormPage: React.FC = () => {
         category: "",
         size: "",
         brand: "",
-        condition: "", // Add condition to state
-        images: [] as File[],
+        condition: "",
     });
     const [dragActive, setDragActive] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [images, setImages] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-    const [audience, setAudience] = useState<keyof typeof categoryMap | "">(""); // Added audience state
+    const [audience, setAudience] = useState<keyof typeof categoryMap | "">("");
     const [defectImage, setDefectImage] = useState<File | null>(null);
     const [defectPreview, setDefectPreview] = useState<string>("");
-    const [successMessage, setSuccessMessage] = useState(""); // Success message state
+    const [successMessage, setSuccessMessage] = useState("");
+    const [showPopup, setShowPopup] = useState(false);
 
     const updatePreviews = (files: File[]) => {
         const readers = files.map((file) => {
@@ -110,7 +82,7 @@ const SellFormPage: React.FC = () => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files ? Array.from(e.target.files) : [];
-        const newImages = [...images, ...files].slice(0, 5); // max 5 images
+        const newImages = [...images, ...files].slice(0, 5);
         setImages(newImages);
         updatePreviews(newImages);
     };
@@ -139,7 +111,7 @@ const SellFormPage: React.FC = () => {
             const validTypes = ["image/jpeg", "image/png", "image/webp"];
             return validTypes.includes(file.type) && file.size <= 5 * 1024 * 1024;
         });
-        const newImages = [...images, ...validFiles].slice(0, 5); // max 5 images
+        const newImages = [...images, ...validFiles].slice(0, 5);
         setImages(newImages);
         updatePreviews(newImages);
     };
@@ -174,10 +146,24 @@ const SellFormPage: React.FC = () => {
         if (!form.category) newErrors.category = "Category is required.";
         if (!form.size) newErrors.size = "Size is required.";
         if (!form.brand.trim()) newErrors.brand = "Brand is required.";
-        if (!form.condition) newErrors.condition = "Condition is required."; // Add condition validation
+        if (!form.condition) newErrors.condition = "Condition is required.";
         if (images.length === 0) newErrors.images = "At least one image is required.";
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    // Cloudinary upload function
+    const handleCloudinaryUpload = async (files: File[]) => {
+        const urls: string[] = [];
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+            const res = await axios.post(CLOUDINARY_URL, formData);
+            urls.push(res.data.secure_url);
+        }
+        return urls;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -188,22 +174,17 @@ const SellFormPage: React.FC = () => {
                 const user = auth.currentUser;
                 if (!user) throw new Error("User not authenticated");
 
-                // Upload images to Firebase Storage
-                const imageUrls: string[] = [];
-                for (let i = 0; i < images.length; i++) {
-                    const image = images[i];
-                    const storageRef = ref(storage, `products/${user.uid}/${Date.now()}_${image.name}`);
-                    await uploadBytes(storageRef, image);
-                    const url = await getDownloadURL(storageRef);
-                    imageUrls.push(url);
-                }
+                // Upload images to Cloudinary
+                const imageUrls = await handleCloudinaryUpload(images);
 
                 // Upload defect image if present
                 let defectImageUrl = "";
                 if (defectImage) {
-                    const defectRef = ref(storage, `products/${user.uid}/defect_${Date.now()}_${defectImage.name}`);
-                    await uploadBytes(defectRef, defectImage);
-                    defectImageUrl = await getDownloadURL(defectRef);
+                    const defectFormData = new FormData();
+                    defectFormData.append("file", defectImage);
+                    defectFormData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+                    const defectRes = await axios.post(CLOUDINARY_URL, defectFormData);
+                    defectImageUrl = defectRes.data.secure_url;
                 }
 
                 // Prepare listing data
@@ -220,6 +201,7 @@ const SellFormPage: React.FC = () => {
                 await addDoc(collection(db, "products"), formData);
 
                 setSuccessMessage("Your item has been successfully submitted!");
+                setShowPopup(true); // Show popup
                 handleReset();
             } catch (error) {
                 console.error("Error submitting form: ", error);
@@ -236,13 +218,14 @@ const SellFormPage: React.FC = () => {
             category: "",
             size: "",
             brand: "",
-            condition: "", // Reset condition
-            images: [],
+            condition: "",
         });
         setImagePreviews([]);
         setImages([]);
         setAudience("");
         setErrors({});
+        setDefectImage(null);
+        setDefectPreview("");
     };
 
     return (
@@ -255,6 +238,55 @@ const SellFormPage: React.FC = () => {
             }}
         >
             <Navbar />
+            {showPopup && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "100vw",
+                        height: "100vh",
+                        background: "rgba(0,0,0,0.3)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 9999,
+                    }}
+                    onClick={() => setShowPopup(false)}
+                >
+                    <div
+                        style={{
+                            background: "#fff",
+                            padding: "32px",
+                            borderRadius: "12px",
+                            boxShadow: "0 2px 16px #aaa",
+                            textAlign: "center",
+                            minWidth: "320px",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h2 style={{ color: "#155724", marginBottom: "16px" }}>Success!</h2>
+                        <p style={{ color: "#155724", fontWeight: "bold", marginBottom: "24px" }}>
+                            {successMessage}
+                        </p>
+                        <button
+                            style={{
+                                padding: "10px 32px",
+                                background: "#c9a26d",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontWeight: "bold",
+                                fontSize: "16px",
+                                cursor: "pointer",
+                            }}
+                            onClick={() => setShowPopup(false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
             <main
                 style={{
                     flex: 1,
@@ -341,11 +373,15 @@ const SellFormPage: React.FC = () => {
                             />
                         </label>
                     </div>
-                    {/* Move image previews and upload area here */}
                     <div style={{ marginTop: "32px" }}>
                         <div
                             style={{
-                                ...styles.imageUpload,
+                                border: "2px dashed #e9ecef",
+                                borderRadius: "0.5rem",
+                                padding: "2rem",
+                                textAlign: "center",
+                                cursor: "pointer",
+                                transition: "border-color 0.3s ease",
                                 borderColor: dragActive
                                     ? "#c9a26d"
                                     : errors.images
@@ -397,7 +433,14 @@ const SellFormPage: React.FC = () => {
                             </p>
                         </div>
                         {errors.images && (
-                            <div style={styles.errorMessage}>
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                                color: "#dc3545",
+                                marginTop: "0.5rem",
+                                fontSize: "0.875rem",
+                            }}>
                                 {errors.images}
                             </div>
                         )}
@@ -479,7 +522,7 @@ const SellFormPage: React.FC = () => {
                     )}
                     <form onSubmit={handleSubmit} noValidate>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Title
                                 <input
                                     type="text"
@@ -498,12 +541,19 @@ const SellFormPage: React.FC = () => {
                                     placeholder="Item title"
                                 />
                                 {errors.title && (
-                                    <div style={styles.errorMessage}>{errors.title}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.title}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Description
                                 <textarea
                                     name="description"
@@ -521,12 +571,19 @@ const SellFormPage: React.FC = () => {
                                     placeholder="Describe your item"
                                 />
                                 {errors.description && (
-                                    <div style={styles.errorMessage}>{errors.description}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.description}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Price (RM)
                                 <input
                                     type="number"
@@ -546,12 +603,19 @@ const SellFormPage: React.FC = () => {
                                     placeholder="Price"
                                 />
                                 {errors.price && (
-                                    <div style={styles.errorMessage}>{errors.price}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.price}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Audience
                                 <select
                                     name="audience"
@@ -573,12 +637,19 @@ const SellFormPage: React.FC = () => {
                                     <option value="Kids">Kids</option>
                                 </select>
                                 {errors.audience && (
-                                    <div style={styles.errorMessage}>{errors.audience}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.audience}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Category
                                 <select
                                     name="category"
@@ -602,12 +673,19 @@ const SellFormPage: React.FC = () => {
                                         ))}
                                 </select>
                                 {errors.category && (
-                                    <div style={styles.errorMessage}>{errors.category}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.category}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Clothing Size
                                 <select
                                     name="size"
@@ -629,12 +707,19 @@ const SellFormPage: React.FC = () => {
                                     ))}
                                 </select>
                                 {errors.size && (
-                                    <div style={styles.errorMessage}>{errors.size}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.size}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Brand
                                 <input
                                     type="text"
@@ -653,12 +738,19 @@ const SellFormPage: React.FC = () => {
                                     placeholder="Type the brand name"
                                 />
                                 {errors.brand && (
-                                    <div style={styles.errorMessage}>{errors.brand}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.brand}</div>
                                 )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.label}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                 Condition
                                 <select
                                     name="condition"
@@ -680,7 +772,14 @@ const SellFormPage: React.FC = () => {
                                     ))}
                                 </select>
                                 {errors.condition && (
-                                    <div style={styles.errorMessage}>{errors.condition}</div>
+                                    <div style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.condition}</div>
                                 )}
                                 <div style={{ color: "#555", fontSize: "0.95rem", marginTop: "8px" }}>
                                     Please be honest about the item's condition. If there are any defects, mention them and upload a close-up photo.
@@ -689,7 +788,7 @@ const SellFormPage: React.FC = () => {
                         </div>
                         {defectConditions.includes(form.condition) && (
                             <div style={{ marginBottom: "24px" }}>
-                                <label style={styles.label}>
+                                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
                                     Close-up Defect Image (if any)
                                     <input
                                         type="file"

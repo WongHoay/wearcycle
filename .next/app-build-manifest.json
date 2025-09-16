@@ -11,10 +11,25 @@
       "static/chunks/main-app.js",
       "static/chunks/app/login/page.js"
     ],
-    "/sell_form/page": [
+    "/homepage/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/sell_form/page.js"
+      "static/chunks/app/homepage/page.js"
+    ],
+    "/view_item/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/view_item/page.js"
+    ],
+    "/cart/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/cart/page.js"
+    ],
+    "/not-found": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/not-found.js"
     ]
   }
 }

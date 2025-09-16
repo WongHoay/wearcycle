@@ -3,6 +3,9 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc, collection, getDocs, arrayRemove, updateDoc } from "firebase/firestore";
+import { db } from "../../firebaseConfig";
 
 // Type for favourite item
 type FavouriteItem = {
@@ -14,37 +17,67 @@ type FavouriteItem = {
     seller?: string;
 };
 
-// Fetch favourites from localStorage (simulate saved items)
-const getFavourites = (): FavouriteItem[] => {
-    if (typeof window === "undefined") return [];
-    const data = localStorage.getItem("favourites");
-    return data ? JSON.parse(data) : [];
-};
-
-// Remove item from favourites
-const removeFromFavourites = (itemId: string): void => {
-    if (typeof window === "undefined") return;
-    const favourites = getFavourites();
-    const updatedFavourites = favourites.filter(item => item.id !== itemId);
-    localStorage.setItem("favourites", JSON.stringify(updatedFavourites));
-};
-
 const FavouritePage: React.FC = () => {
     const [favourites, setFavourites] = useState<FavouriteItem[]>([]);
+    const [loading, setLoading] = useState(true);
     const router = useRouter();
 
     useEffect(() => {
-        setFavourites(getFavourites());
+        const fetchFavourites = async () => {
+            setLoading(true);
+            const auth = getAuth();
+            const user = auth.currentUser;
+            if (!user) {
+                setFavourites([]);
+                setLoading(false);
+                return;
+            }
+            // Get favorite IDs
+            const favRef = doc(db, "favorites", user.uid);
+            const favSnap = await getDoc(favRef);
+            const favIds: string[] = favSnap.exists() ? favSnap.data().items || [] : [];
+            if (favIds.length === 0) {
+                setFavourites([]);
+                setLoading(false);
+                return;
+            }
+            // Fetch product details for each favorite
+            const productsRef = collection(db, "products");
+            const productsSnap = await getDocs(productsRef);
+            const items: FavouriteItem[] = [];
+            productsSnap.forEach(docSnap => {
+                if (favIds.includes(docSnap.id)) {
+                    const data = docSnap.data();
+                    items.push({
+                        id: docSnap.id,
+                        name: data.name || data.title || "",
+                        image: data.image || data.images?.[0] || "",
+                        description: data.description || "",
+                        price: data.price ? `RM ${data.price}` : "",
+                        seller: data.seller || "",
+                    });
+                }
+            });
+            setFavourites(items);
+            setLoading(false);
+        };
+        fetchFavourites();
     }, []);
-
-    const handleRemoveFromFavourites = (itemId: string) => {
-        removeFromFavourites(itemId);
-        setFavourites(prev => prev.filter(item => item.id !== itemId));
-    };
 
     const handleItemClick = (itemId: string) => {
         // Navigate to item detail page
         router.push(`/items/${itemId}`);
+    };
+
+    const handleRemoveFavourite = async (itemId: string) => {
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) return;
+        const favRef = doc(db, "favorites", user.uid);
+        await updateDoc(favRef, {
+            items: arrayRemove(itemId)
+        });
+        setFavourites(prev => prev.filter(item => item.id !== itemId));
     };
 
     const styles = {
@@ -127,27 +160,6 @@ const FavouritePage: React.FC = () => {
             fontSize: "0.85rem",
             color: "#888",
         },
-        removeButton: {
-            position: "absolute" as const,
-            top: "16px",
-            right: "16px",
-            background: "#ff4757",
-            color: "white",
-            border: "none",
-            borderRadius: "50%",
-            width: "32px",
-            height: "32px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            fontSize: "14px",
-            transition: "all 0.2s ease",
-        },
-        removeButtonHover: {
-            background: "#ff3742",
-            transform: "scale(1.1)",
-        },
         itemCount: {
             fontSize: "1rem",
             color: "#666",
@@ -160,78 +172,84 @@ const FavouritePage: React.FC = () => {
             <Navbar />
             <main style={styles.main}>
                 <h1 style={styles.title}>Your Favourite Items</h1>
-                
-                {favourites.length > 0 && (
-                    <p style={styles.itemCount}>
-                        {favourites.length} item{favourites.length !== 1 ? 's' : ''} saved
-                    </p>
-                )}
-
-                {favourites.length === 0 ? (
+                {loading ? (
+                    <div style={styles.emptyState}>Loading...</div>
+                ) : favourites.length > 0 ? (
+                    <>
+                        <p style={styles.itemCount}>
+                            {favourites.length} item{favourites.length !== 1 ? 's' : ''} saved
+                        </p>
+                        <ul style={styles.itemsList}>
+                            {favourites.map((item) => (
+                                <li
+                                    key={item.id}
+                                    style={styles.itemCard}
+                                    onClick={() => handleItemClick(item.id)}
+                                    onMouseEnter={(e) => {
+                                        Object.assign(e.currentTarget.style, styles.itemCardHover);
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = "translateY(0)";
+                                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+                                    }}
+                                >
+                                    <img
+                                        src={item.image}
+                                        alt={item.name}
+                                        width={120}
+                                        height={120}
+                                        style={styles.itemImage}
+                                    />
+                                    <div style={styles.itemContent}>
+                                        <h2 style={styles.itemName}>{item.name}</h2>
+                                        {item.description && (
+                                            <p style={styles.itemDescription}>
+                                                {item.description}
+                                            </p>
+                                        )}
+                                        {item.price && (
+                                            <p style={styles.itemPrice}>
+                                                {item.price}
+                                            </p>
+                                        )}
+                                        {item.seller && (
+                                            <p style={styles.itemSeller}>
+                                                Sold by {item.seller}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            handleRemoveFavourite(item.id);
+                                        }}
+                                        style={{
+                                            position: "absolute",
+                                            top: "16px",
+                                            right: "16px",
+                                            background: "#fff",
+                                            border: "1px solid #c9a26d",
+                                            color: "#c9a26d",
+                                            borderRadius: "8px",
+                                            padding: "4px 10px",
+                                            fontWeight: "bold",
+                                            cursor: "pointer",
+                                            fontSize: "0.9rem"
+                                        }}
+                                        title="Remove from favourites"
+                                    >
+                                        Remove
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </>
+                ) : (
                     <div style={styles.emptyState}>
                         <p>No favourite items saved yet.</p>
                         <p>Start browsing and save items you love!</p>
                     </div>
-                ) : (
-                    <ul style={styles.itemsList}>
-                        {favourites.map((item) => (
-                            <li
-                                key={item.id}
-                                style={styles.itemCard}
-                                onClick={() => handleItemClick(item.id)}
-                                onMouseEnter={(e) => {
-                                    Object.assign(e.currentTarget.style, styles.itemCardHover);
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = "translateY(0)";
-                                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
-                                }}
-                            >
-                                <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    width={120}
-                                    height={120}
-                                    style={styles.itemImage}
-                                />
-                                <div style={styles.itemContent}>
-                                    <h2 style={styles.itemName}>{item.name}</h2>
-                                    {item.description && (
-                                        <p style={styles.itemDescription}>
-                                            {item.description}
-                                        </p>
-                                    )}
-                                    {item.price && (
-                                        <p style={styles.itemPrice}>
-                                            {item.price}
-                                        </p>
-                                    )}
-                                    {item.seller && (
-                                        <p style={styles.itemSeller}>
-                                            Sold by {item.seller}
-                                        </p>
-                                    )}
-                                </div>
-                                <button
-                                    style={styles.removeButton}
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent item click when removing
-                                        handleRemoveFromFavourites(item.id);
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        Object.assign(e.currentTarget.style, styles.removeButtonHover);
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = "#ff4757";
-                                        e.currentTarget.style.transform = "scale(1)";
-                                    }}
-                                    title="Remove from favourites"
-                                >
-                                    ×
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
                 )}
             </main>
             <Footer />

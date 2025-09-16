@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Navbar from "../../components/navbar";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc, collection, getDocs, setDoc } from "firebase/firestore";
+import { db } from "../../firebaseConfig";
+import { useRouter } from "next/navigation";
 
 interface CartItem {
     id: string;
@@ -9,41 +13,67 @@ interface CartItem {
     price: number;
     image: string;
     size: string;
-    quantity: number;
 }
 
 export default function CartPage() {
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
-        // Load cart items from localStorage or API
-        const savedCart = localStorage.getItem('cart');
-        if (savedCart) {
-            setCartItems(JSON.parse(savedCart));
-        }
-        setLoading(false);
+        const fetchCart = async () => {
+            setLoading(true);
+            const auth = getAuth();
+            const user = auth.currentUser;
+            if (!user) {
+                setCartItems([]);
+                setLoading(false);
+                return;
+            }
+            const cartRef = doc(db, "carts", user.uid);
+            const cartSnap = await getDoc(cartRef);
+            const cartIds: string[] = cartSnap.exists() ? cartSnap.data().items || [] : [];
+            if (cartIds.length === 0) {
+                setCartItems([]);
+                setLoading(false);
+                return;
+            }
+            const productsRef = collection(db, "products");
+            const productsSnap = await getDocs(productsRef);
+            const items: CartItem[] = [];
+            productsSnap.forEach(docSnap => {
+                if (cartIds.includes(docSnap.id)) {
+                    const data = docSnap.data();
+                    items.push({
+                        id: docSnap.id,
+                        name: data.name || data.title || "",
+                        price: Number(data.price),
+                        image: data.image || data.images?.[0] || "",
+                        size: data.size || "",
+                    });
+                }
+            });
+            setCartItems(items);
+            setLoading(false);
+        };
+        fetchCart();
     }, []);
 
-    const updateQuantity = (id: string, newQuantity: number) => {
-        if (newQuantity <= 0) {
-            removeItem(id);
-            return;
+    const removeItem = async (id: string) => {
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) return;
+        const cartRef = doc(db, "carts", user.uid);
+        const cartSnap = await getDoc(cartRef);
+        if (cartSnap.exists()) {
+            const items: string[] = cartSnap.data().items || [];
+            const updatedItems = items.filter(itemId => itemId !== id);
+            await setDoc(cartRef, { items: updatedItems });
         }
-        const updatedItems = cartItems.map(item =>
-            item.id === id ? { ...item, quantity: newQuantity } : item
-        );
-        setCartItems(updatedItems);
-        localStorage.setItem('cart', JSON.stringify(updatedItems));
+        setCartItems(prev => prev.filter(item => item.id !== id));
     };
 
-    const removeItem = (id: string) => {
-        const updatedItems = cartItems.filter(item => item.id !== id);
-        setCartItems(updatedItems);
-        localStorage.setItem('cart', JSON.stringify(updatedItems));
-    };
-
-    const totalPrice = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const totalPrice = cartItems.reduce((sum, item) => sum + item.price, 0);
 
     return (
         <>
@@ -70,8 +100,6 @@ export default function CartPage() {
                                         <th className="py-2 text-left">Product</th>
                                         <th className="py-2 text-center">Size</th>
                                         <th className="py-2 text-center">Price</th>
-                                        <th className="py-2 text-center">Quantity</th>
-                                        <th className="py-2 text-center">Total</th>
                                         <th className="py-2"></th>
                                     </tr>
                                 </thead>
@@ -83,19 +111,7 @@ export default function CartPage() {
                                                 <span className="font-medium">{item.name}</span>
                                             </td>
                                             <td className="py-4 text-center">{item.size}</td>
-                                            <td className="py-4 text-center">${item.price.toFixed(2)}</td>
-                                            <td className="py-4 text-center">
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={item.quantity}
-                                                    onChange={e => updateQuantity(item.id, Number(e.target.value))}
-                                                    className="w-16 px-2 py-1 border rounded text-center"
-                                                />
-                                            </td>
-                                            <td className="py-4 text-center font-semibold">
-                                                ${(item.price * item.quantity).toFixed(2)}
-                                            </td>
+                                            <td className="py-4 text-center">RM {item.price.toFixed(2)}</td>
                                             <td className="py-4 text-center">
                                                 <button
                                                     onClick={() => removeItem(item.id)}
@@ -109,10 +125,10 @@ export default function CartPage() {
                                 </tbody>
                             </table>
                             <div className="flex justify-between items-center">
-                                <span className="text-xl font-bold">Total: ${totalPrice.toFixed(2)}</span>
+                                <span className="text-xl font-bold">Total: RM {totalPrice.toFixed(2)}</span>
                                 <button
                                     className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 font-semibold"
-                                    onClick={() => alert("Proceed to checkout")}
+                                    onClick={() => router.push("/checkout")}
                                 >
                                     Checkout
                                 </button>

@@ -1,8 +1,15 @@
 "use client";
 import React, { useState } from "react";
-import { Camera, AlertCircle, X } from "lucide-react";
+import { Camera, AlertCircle } from "lucide-react";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
+import axios from "axios";
+import { db } from "../../firebaseConfig";
+import { collection, addDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dez1qts8e/upload";
+const CLOUDINARY_UPLOAD_PRESET = "unsigned_preset";
 
 const styles = {
     formGroup: {
@@ -40,14 +47,16 @@ function BidForm() {
         description: "",
         endDate: "",
         price: "",
-        images: [] as File[],
+        minIncrement: "", // <-- Add this field
         size: "",
         brand: "",
     });
     const [dragActive, setDragActive] = useState(false);
-    const [errors, setErrors] = useState<{ images?: string }>({});
+    const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [images, setImages] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const [successMessage, setSuccessMessage] = useState("");
+    const [showPopup, setShowPopup] = useState(false);
 
     const updatePreviews = (files: File[]) => {
         const readers = files.map((file) => {
@@ -77,25 +86,6 @@ function BidForm() {
         const newImages = [...images, ...files].slice(0, 5); // max 5 images
         setImages(newImages);
         updatePreviews(newImages);
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        alert("Bidding information submitted!");
-    };
-
-    const handleReset = () => {
-        setForm({
-            productName: "",
-            description: "",
-            endDate: "",
-            price: "",
-            images: [],
-            size: "",
-            brand: "",
-        });
-        setImagePreviews([]);
-        setImages([]);
     };
 
     const handleDrag = (e: React.DragEvent) => {
@@ -134,6 +124,93 @@ function BidForm() {
         updatePreviews(newImages);
     };
 
+    const validateForm = () => {
+        const newErrors: { [key: string]: string } = {};
+        if (!form.productName.trim()) newErrors.productName = "Product name is required.";
+        if (!form.description.trim()) newErrors.description = "Description is required.";
+        if (!form.endDate.trim()) newErrors.endDate = "End date is required.";
+        if (!form.price.trim() || isNaN(Number(form.price)) || Number(form.price) <= 0) newErrors.price = "Valid price is required.";
+        if (!form.minIncrement.trim() || isNaN(Number(form.minIncrement)) || Number(form.minIncrement) <= 0) newErrors.minIncrement = "Minimum increment is required.";
+        if (!form.size) newErrors.size = "Size is required.";
+        if (!form.brand.trim()) newErrors.brand = "Brand is required.";
+        if (images.length === 0) newErrors.images = "At least one image is required.";
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // Cloudinary upload function
+    const handleCloudinaryUpload = async (files: File[]) => {
+        const urls: string[] = [];
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+            const res = await axios.post(CLOUDINARY_URL, formData);
+            urls.push(res.data.secure_url);
+        }
+        return urls;
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (validateForm()) {
+            try {
+                const auth = getAuth();
+                const user = auth.currentUser;
+                if (!user) throw new Error("User not authenticated");
+
+                // Upload images to Cloudinary
+                const imageUrls = await handleCloudinaryUpload(images);
+
+                // Prepare bid data
+                const bidData = {
+                    ...form,
+                    price: Number(form.price),
+                    minIncrement: Number(form.minIncrement), // Save as number
+                    images: imageUrls,
+                    userId: user.uid,
+                    createdAt: new Date(),
+                };
+
+                // Save to Firestore (bids collection)
+                await addDoc(collection(db, "bids"), bidData);
+
+                setSuccessMessage("Your bid has been successfully submitted!");
+                setShowPopup(true);
+                handleReset();
+            } catch (error: any) {
+                console.error("Error submitting bid: ", error);
+
+                let userMessage = "Failed to submit bid. Please try again.";
+                if (error?.response?.status === 401) {
+                    userMessage = "Image upload failed: Unauthorized. Please check your Cloudinary upload preset settings or make sure you are not using a signed preset.";
+                } else if (error?.message?.includes("User not authenticated")) {
+                    userMessage = "You must be logged in to submit a bid.";
+                } else if (error?.response?.status === 400) {
+                    userMessage = "Image upload failed: Bad request. Please check your image file type and size.";
+                }
+
+                alert(userMessage);
+            }
+        }
+    };
+
+    const handleReset = () => {
+        setForm({
+            productName: "",
+            description: "",
+            endDate: "",
+            price: "",
+            minIncrement: "",
+            size: "",
+            brand: "",
+        });
+        setImagePreviews([]);
+        setImages([]);
+        setErrors({});
+    };
+
     // Add options for size
     const sizeOptions = [
         "XXS / EU44 / UK34 / US34",
@@ -156,6 +233,55 @@ function BidForm() {
             }}
         >
             <Navbar />
+            {showPopup && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "100vw",
+                        height: "100vh",
+                        background: "rgba(0,0,0,0.3)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 9999,
+                    }}
+                    onClick={() => setShowPopup(false)}
+                >
+                    <div
+                        style={{
+                            background: "#fff",
+                            padding: "32px",
+                            borderRadius: "12px",
+                            boxShadow: "0 2px 16px #aaa",
+                            textAlign: "center",
+                            minWidth: "320px",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h2 style={{ color: "#155724", marginBottom: "16px" }}>Success!</h2>
+                        <p style={{ color: "#155724", fontWeight: "bold", marginBottom: "24px" }}>
+                            {successMessage}
+                        </p>
+                        <button
+                            style={{
+                                padding: "10px 32px",
+                                background: "#c9a26d",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontWeight: "bold",
+                                fontSize: "16px",
+                                cursor: "pointer",
+                            }}
+                            onClick={() => setShowPopup(false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
             <main
                 style={{
                     flex: 1,
@@ -242,7 +368,6 @@ function BidForm() {
                             />
                         </label>
                     </div>
-                    {/* Move image previews and upload area here */}
                     <div style={{ marginTop: "32px" }}>
                         <div
                             style={{
@@ -367,101 +492,6 @@ function BidForm() {
                     }}
                 >
                     <form onSubmit={handleSubmit}>
-                        {/* 
-                        // Original upload code commented out:
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>
-                                Reference Images{" "}
-                                <span style={styles.requiredLabel}>*</span>
-                            </label>
-                            <div
-                                style={{
-                                    ...styles.imageUpload,
-                                    borderColor: dragActive
-                                        ? "#c9a26d"
-                                        : errors.images
-                                        ? "#dc3545"
-                                        : "#e9ecef",
-                                }}
-                                onClick={() =>
-                                    document.getElementById("image-upload")?.click()
-                                }
-                                onDragEnter={handleDrag}
-                                onDragLeave={handleDrag}
-                                onDragOver={handleDrag}
-                                onDrop={handleDrop}
-                            >
-                                <Camera
-                                    size={48}
-                                    style={{ color: "#c9a26d", marginBottom: "1rem" }}
-                                />
-                                <h4
-                                    style={{
-                                        margin: "0 0 0.5rem 0",
-                                        color: "#2c3e50",
-                                    }}
-                                >
-                                    Upload Reference Images
-                                </h4>
-                                <p
-                                    style={{
-                                        margin: "0 0 0.5rem 0",
-                                        color: "#6c757d",
-                                    }}
-                                >
-                                    Click to upload or drag and drop images here
-                                </p>
-                                <p
-                                    style={{
-                                        fontSize: "0.875rem",
-                                        color: "#6c757d",
-                                        margin: 0,
-                                    }}
-                                >
-                                    Maximum 5 images, each up to 5MB (JPG, PNG, WebP)
-                                </p>
-                                <input
-                                    id="image-upload"
-                                    type="file"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    multiple
-                                    onChange={handleFileChange}
-                                    style={{ display: "none" }}
-                                />
-                            </div>
-                            {errors.images && (
-                                <div style={styles.errorMessage}>
-                                    <AlertCircle size={14} />
-                                    {errors.images}
-                                </div>
-                            )}
-
-                            {imagePreviews.length > 0 && (
-                                <div style={styles.imagePreview}>
-                                    {imagePreviews.map((src, idx) => (
-                                        <div key={idx} style={styles.imageItem}>
-                                            <img
-                                                src={src}
-                                                alt={`Preview ${idx + 1}`}
-                                                style={styles.image}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    removeImage(idx);
-                                                }}
-                                                style={styles.removeButton}
-                                                title="Remove image"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        */}
                         <div style={{ marginBottom: "24px" }}>
                             <label
                                 style={{
@@ -570,6 +600,41 @@ function BidForm() {
                                     min="0"
                                     step="any"
                                 />
+                            </label>
+                        </div>
+                        <div style={{ marginBottom: "24px" }}>
+                            <label
+                                style={{
+                                    fontWeight: "500",
+                                    display: "block",
+                                    marginBottom: "8px",
+                                }}
+                            >
+                                Minimum Bid Increment
+                                <input
+                                    type="number"
+                                    name="minIncrement"
+                                    value={form.minIncrement}
+                                    onChange={handleChange}
+                                    required
+                                    min="1"
+                                    style={{
+                                        width: "100%",
+                                        marginTop: "8px",
+                                        padding: "8px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #ccc",
+                                        background: "#fff",
+                                    }}
+                                    placeholder="Enter minimum increment (e.g. 5)"
+                                />
+                                {errors.minIncrement && (
+                                    <div style={{
+                                        color: "#dc3545",
+                                        marginTop: "0.5rem",
+                                        fontSize: "0.875rem",
+                                    }}>{errors.minIncrement}</div>
+                                )}
                             </label>
                         </div>
                         <div style={{ marginBottom: "24px" }}>

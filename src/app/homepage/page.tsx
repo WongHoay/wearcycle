@@ -1,8 +1,41 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Filter, Heart, Star, MapPin } from 'lucide-react';
 import Footer from '../../components/footer';
 import Navbar from '../../components/navbar';
+import { collection, getDocs, query, limit, orderBy } from "firebase/firestore";
+import { db } from "../../firebaseConfig";
+import { useRouter } from "next/navigation";
+
+interface Product {
+  id: string;
+  name?: string;
+  title?: string;
+  price: number;
+  originalPrice?: number;
+  image?: string;
+  images?: string[];
+  condition: string;
+  size: string;
+  location: string;
+  isFavorite?: boolean;
+  createdAt?: any;
+  seller?: string;
+  rating?: number;
+}
+
+interface BidItem {
+  id: string;
+  productName?: string;
+  name?: string;
+  description?: string;
+  price: number;
+  minIncrement: number;
+  endDate: string;
+  image?: string;
+  images?: string[];
+  createdAt?: any;
+}
 
 const HomePage = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,88 +45,24 @@ const HomePage = () => {
     brand: ''
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [featuredItems, setFeaturedItems] = useState<Product[]>([]);
+  const [biddingItems, setBiddingItems] = useState<BidItem[]>([]);
+  const router = useRouter();
 
-  // Sample data for featured items
-  const featuredItems = [
-    {
-      id: 1,
-      name: "Vintage Levi's Denim Jacket",
-      price: "RM 85",
-      originalPrice: "RM 250",
-      image: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=400&fit=crop",
-      seller: "Sarah K.",
-      condition: "Good",
-      size: "M",
-      location: "Kuala Lumpur",
-      rating: 4.8,
-      isFavorite: false
-    },
-    {
-      id: 2,
-      name: "Coach Leather Handbag",
-      price: "RM 320",
-      originalPrice: "RM 800",
-      image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop",
-      seller: "Mei Lin",
-      condition: "Like New",
-      size: "One Size",
-      location: "Penang",
-      rating: 5.0,
-      isFavorite: true
-    },
-    {
-      id: 3,
-      name: "Nike Air Max Sneakers",
-      price: "RM 180",
-      originalPrice: "RM 450",
-      image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop",
-      seller: "Ahmad R.",
-      condition: "Good",
-      size: "US 9",
-      location: "Johor",
-      rating: 4.5,
-      isFavorite: false
-    },
-    {
-      id: 4,
-      name: "Zara Floral Summer Dress",
-      price: "RM 65",
-      originalPrice: "RM 159",
-      image: "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400&h=400&fit=crop",
-      seller: "Lisa T.",
-      condition: "Like New",
-      size: "S",
-      location: "Selangor",
-      rating: 4.9,
-      isFavorite: false
-    },
-    {
-      id: 5,
-      name: "H&M Black Blazer",
-      price: "RM 45",
-      originalPrice: "RM 120",
-      image: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400&h=400&fit=crop",
-      seller: "Jenny W.",
-      condition: "Good",
-      size: "L",
-      location: "Penang",
-      rating: 4.3,
-      isFavorite: false
-    },
-    {
-      id: 6,
-      name: "Adidas Track Pants",
-      price: "RM 55",
-      originalPrice: "RM 140",
-      image: "https://images.unsplash.com/photo-1506629905607-ce91de54c4d8?w=400&h=400&fit=crop",
-      seller: "Kevin L.",
-      condition: "Good",
-      size: "M",
-      location: "Kuala Lumpur",
-      rating: 4.6,
-      isFavorite: true
-    }
-  ];
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      const q = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(6));
+      const snapshot = await getDocs(q);
+      setFeaturedItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+    };
+    const fetchBidding = async () => {
+      const q = query(collection(db, "bids"), orderBy("createdAt", "desc"), limit(3));
+      const snapshot = await getDocs(q);
+      setBiddingItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BidItem)));
+    };
+    fetchFeatured();
+    fetchBidding();
+  }, []);
 
   const categories = ['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Bags', 'Accessories'];
   const conditions = ['Like New', 'Good', 'Fair', 'Worn'];
@@ -106,9 +75,15 @@ const HomePage = () => {
     }));
   };
 
-  const toggleFavorite = (itemId: number) => {
+  const toggleFavorite = (itemId: string) => {
     // In a real app, this would update the backend
     console.log('Toggle favorite for item:', itemId);
+  };
+
+  const handleSearchSubmit = () => {
+    // Implement search functionality or navigation
+    console.log('Search submitted for query:', searchQuery);
+    router.push(`/search?query=${encodeURIComponent(searchQuery)}`);
   };
 
   return (
@@ -118,10 +93,8 @@ const HomePage = () => {
       flexDirection: 'column',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      {/* Add your Navbar component here */}
       <Navbar/>
       &nbsp;
-      
       <div style={{
         flex: 1,
         background: 'linear-gradient(135deg, #c9a26d 0%, #8b7355 100%)'
@@ -151,7 +124,6 @@ const HomePage = () => {
             }}>
               Discover unique secondhand clothing from trusted sellers across Malaysia
             </p>
-
             {/* Search Bar */}
             <div style={{
               background: 'white',
@@ -208,7 +180,7 @@ const HomePage = () => {
                 borderRadius: '25px',
                 fontWeight: '600',
                 cursor: 'pointer'
-              }}>
+              }} onClick={handleSearchSubmit}>
                 Search
               </button>
             </div>
@@ -315,7 +287,6 @@ const HomePage = () => {
                 </div>
               </div>
             </div>
-            
             <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
               <button
                 onClick={() => setSelectedFilters({
@@ -366,7 +337,6 @@ const HomePage = () => {
           }}>
             Featured Items
           </h3>
-          
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -392,6 +362,7 @@ const HomePage = () => {
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
                 }}
+                onClick={() => router.push(`/view_item?id=${item.id}`)}
               >
                 {/* Favorite Button */}
                 <button
@@ -425,11 +396,24 @@ const HomePage = () => {
                 {/* Item Image */}
                 <div style={{
                   width: '100%',
-                  height: '250px',
-                  backgroundImage: `url(${item.image})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }} />
+                  height: '220px',
+                  background: '#f9f9f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden'
+                }}>
+                  <img
+                    src={item.image || item.images?.[0] || 'https://via.placeholder.com/220'}
+                    alt={item.name || item.title}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: '0'
+                    }}
+                  />
+                </div>
 
                 {/* Item Details */}
                 <div style={{ padding: '1.25rem' }}>
@@ -446,7 +430,7 @@ const HomePage = () => {
                       color: '#333',
                       lineHeight: '1.3'
                     }}>
-                      {item.name}
+                      {item.name || item.title}
                     </h4>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{
@@ -454,15 +438,17 @@ const HomePage = () => {
                         fontWeight: '700',
                         color: '#c9a26d'
                       }}>
-                        {item.price}
+                        RM {item.price}
                       </div>
-                      <div style={{
-                        fontSize: '0.875rem',
-                        color: '#999',
-                        textDecoration: 'line-through'
-                      }}>
-                        {item.originalPrice}
-                      </div>
+                      {item.originalPrice && (
+                        <div style={{
+                          fontSize: '0.875rem',
+                          color: '#999',
+                          textDecoration: 'line-through'
+                        }}>
+                          RM {item.originalPrice}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -474,7 +460,7 @@ const HomePage = () => {
                   }}>
                     <Star size={14} fill="#ffd700" color="#ffd700" />
                     <span style={{ fontSize: '0.875rem', color: '#666' }}>
-                      {item.rating} • {item.seller}
+                      {item.rating ? `${item.rating} • ` : ''}{item.seller}
                     </span>
                   </div>
 
@@ -520,9 +506,76 @@ const HomePage = () => {
             ))}
           </div>
         </section>
+
+        {/* Bidding System Section */}
+        <section style={{ background: "#e9e1d3", padding: "2rem 0", marginTop: "2rem" }}>
+          <div style={{ maxWidth: "900px", margin: "0 auto", textAlign: "center" }}>
+            <h2 style={{ fontSize: "2rem", fontWeight: "700", marginBottom: "1rem" }}>Bidding System</h2>
+            <p style={{ fontSize: "1.1rem", marginBottom: "2rem" }}>
+              Place bids on selected items and compete for the best deals! Our bidding system is transparent and easy to use.
+            </p>
+            <div style={{
+              display: "flex",
+              gap: "2rem",
+              justifyContent: "center",
+              flexWrap: "wrap"
+            }}>
+              {biddingItems.length === 0 ? (
+                <div style={{
+                  background: "#fff",
+                  borderRadius: "12px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+                  padding: "1.5rem",
+                  minWidth: "300px"
+                }}>
+                  <strong>No active bids yet.</strong>
+                  <div style={{ margin: "1rem 0" }}>
+                    <img src="https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=200&h=200&fit=crop" alt="Sample" style={{ borderRadius: "8px", width: "100px", height: "100px" }} />
+                    <div>Sample Item</div>
+                    <div>Current Bid: RM 0</div>
+                    <div>Minimum Increment: RM 0</div>
+                  </div>
+                </div>
+              ) : (
+                biddingItems.map(bid => (
+                  <div key={bid.id} style={{
+                    background: "#fff",
+                    borderRadius: "12px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+                    padding: "1.5rem",
+                    minWidth: "300px",
+                    textAlign: "left"
+                  }}>
+                    <strong>{bid.productName || bid.name || "Bid Item"}</strong>
+                    <div style={{ margin: "1rem 0" }}>
+                      <img
+                        src={bid.images?.[0] || bid.image || "https://via.placeholder.com/200"}
+                        alt={bid.productName || bid.name || "Bid Item"}
+                        style={{ borderRadius: "8px", width: "100px", height: "100px", objectFit: "cover" }}
+                      />
+                      <div>{bid.description}</div>
+                      <div>Current Bid: RM {bid.price}</div>
+                      <div>Minimum Increment: RM {bid.minIncrement}</div>
+                      <div>End Date: {bid.endDate}</div>
+                    </div>
+                    <button style={{
+                      background: "#c9a26d",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "0.5rem 1.5rem",
+                      fontWeight: "bold",
+                      cursor: "pointer"
+                    }}>
+                      Start Bidding
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
       </div>
-      
-      {/* Add your Footer component here */}
       <Footer/>
     </div>
   );
