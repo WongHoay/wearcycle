@@ -3,9 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { Search, Filter, Heart, Star, MapPin } from 'lucide-react';
 import Footer from '../../components/footer';
 import Navbar from '../../components/navbar';
-import { collection, getDocs, query, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, limit, orderBy, doc, getDoc, updateDoc, arrayUnion, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { useRouter } from "next/navigation";
+import { getAuth } from 'firebase/auth';
 
 interface Product {
   id: string;
@@ -18,6 +19,7 @@ interface Product {
   condition: string;
   size: string;
   location: string;
+  category?: string;
   isFavorite?: boolean;
   createdAt?: any;
   seller?: string;
@@ -44,9 +46,16 @@ const HomePage = () => {
     condition: '',
     brand: ''
   });
+  const [appliedFilters, setAppliedFilters] = useState({
+    category: '',
+    condition: '',
+    brand: ''
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [featuredItems, setFeaturedItems] = useState<Product[]>([]);
   const [biddingItems, setBiddingItems] = useState<BidItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<Product[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -60,12 +69,53 @@ const HomePage = () => {
       const snapshot = await getDocs(q);
       setBiddingItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BidItem)));
     };
+    const fetchFavorites = async () => {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return;
+      // Fetch from subcollection "items"
+      const itemsRef = collection(db, "favorites", user.uid, "items");
+      const snapshot = await getDocs(itemsRef);
+      setFavoriteIds(snapshot.docs.map(doc => doc.id));
+    };
     fetchFeatured();
     fetchBidding();
+    fetchFavorites();
   }, []);
 
+  useEffect(() => {
+    let items = [...featuredItems];
+    if (appliedFilters.category) {
+      items = items.filter(item => item.category?.toLowerCase() === appliedFilters.category.toLowerCase());
+    }
+    if (appliedFilters.condition) {
+      items = items.filter(item =>
+        item.condition &&
+        item.condition.trim().toLowerCase() === appliedFilters.condition.trim().toLowerCase()
+      );
+    }
+    if (appliedFilters.brand) {
+      if (appliedFilters.brand === "Other") {
+        items = items.filter(item => {
+          const allBrands = brands.map(b => b.toLowerCase()).filter(b => b !== "other");
+          const name = item.name?.toLowerCase() || "";
+          const title = item.title?.toLowerCase() || "";
+          return !allBrands.some(brand =>
+            name.includes(brand) || title.includes(brand)
+          );
+        });
+      } else {
+        items = items.filter(item =>
+          item.name?.toLowerCase().includes(appliedFilters.brand.toLowerCase()) ||
+          item.title?.toLowerCase().includes(appliedFilters.brand.toLowerCase())
+        );
+      }
+    }
+    setFilteredItems(items);
+  }, [featuredItems, appliedFilters]);
+
   const categories = ['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Bags', 'Accessories'];
-  const conditions = ['Like New', 'Good', 'Fair', 'Worn'];
+  const conditions = ['Brand New','Like New', 'Lightly Used', 'Well Used', 'Heavily Used'];
   const brands = ['Zara', 'H&M', 'Nike', 'Adidas', 'Coach', "Levi's", 'Uniqlo', 'Other'];
 
   const handleFilterChange = (filterType: keyof typeof selectedFilters, value: string) => {
@@ -75,15 +125,25 @@ const HomePage = () => {
     }));
   };
 
-  const toggleFavorite = (itemId: string) => {
-    // In a real app, this would update the backend
-    console.log('Toggle favorite for item:', itemId);
+  const handleSearchSubmit = () => {
+    router.push(`/search_result?query=${encodeURIComponent(searchQuery)}`);
   };
 
-  const handleSearchSubmit = () => {
-    // Implement search functionality or navigation
-    console.log('Search submitted for query:', searchQuery);
-    router.push(`/search?query=${encodeURIComponent(searchQuery)}`);
+  const handleSaveFavourite = async (item: Product) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+    const itemRef = doc(db, "favorites", user.uid, "items", item.id);
+
+    if (favoriteIds.includes(item.id)) {
+      // Remove from favourites
+      await deleteDoc(itemRef);
+      setFavoriteIds(prev => prev.filter(id => id !== item.id));
+    } else {
+      // Add to favourites
+      await setDoc(itemRef, item);
+      setFavoriteIds(prev => [...prev, item.id]);
+    }
   };
 
   return (
@@ -310,7 +370,7 @@ const HomePage = () => {
                 padding: '0.5rem 1rem',
                 borderRadius: '8px',
                 cursor: 'pointer'
-              }}>
+              }} onClick={() => setAppliedFilters(selectedFilters)}>
                 Apply Filters
               </button>
             </div>
@@ -342,168 +402,174 @@ const HomePage = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '1.5rem'
           }}>
-            {featuredItems.map(item => (
-              <div
-                key={item.id}
-                style={{
-                  background: 'white',
-                  borderRadius: '15px',
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                  cursor: 'pointer',
-                  position: 'relative'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-5px)';
-                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
-                }}
-                onClick={() => router.push(`/view_item?id=${item.id}`)}
-              >
-                {/* Favorite Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(item.id);
-                  }}
+            {filteredItems.length === 0 ? (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", color: "#888", fontSize: "1.2rem" }}>
+                No products found.
+              </div>
+            ) : (
+              filteredItems.map(item => (
+                <div
+                  key={item.id}
                   style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    background: 'rgba(255, 255, 255, 0.9)',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: '35px',
-                    height: '35px',
+                    background: 'white',
+                    borderRadius: '15px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-5px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+                  }}
+                  onClick={() => router.push(`/view_item?id=${item.id}`)}
+                >
+                  {/* Favorite Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveFavourite(item);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'rgba(255, 255, 255, 0.9)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '35px',
+                      height: '35px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 10
+                    }}
+                  >
+                    <Heart
+                      size={18}
+                      fill={favoriteIds.includes(item.id) ? '#ff4757' : 'none'}
+                      color={favoriteIds.includes(item.id) ? '#ff4757' : '#666'}
+                    />
+                  </button>
+
+                  {/* Item Image */}
+                  <div style={{
+                    width: '100%',
+                    height: '220px',
+                    background: '#f9f9f9',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer',
-                    zIndex: 10
-                  }}
-                >
-                  <Heart
-                    size={18}
-                    fill={item.isFavorite ? '#ff4757' : 'none'}
-                    color={item.isFavorite ? '#ff4757' : '#666'}
-                  />
-                </button>
-
-                {/* Item Image */}
-                <div style={{
-                  width: '100%',
-                  height: '220px',
-                  background: '#f9f9f9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden'
-                }}>
-                  <img
-                    src={item.image || item.images?.[0] || 'https://via.placeholder.com/220'}
-                    alt={item.name || item.title}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: '0'
-                    }}
-                  />
-                </div>
-
-                {/* Item Details */}
-                <div style={{ padding: '1.25rem' }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '0.5rem'
+                    overflow: 'hidden'
                   }}>
-                    <h4 style={{
-                      margin: 0,
-                      fontSize: '1.1rem',
-                      fontWeight: '600',
-                      color: '#333',
-                      lineHeight: '1.3'
+                    <img
+                      src={item.image || item.images?.[0] || 'https://via.placeholder.com/220'}
+                      alt={item.name || item.title}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '0'
+                      }}
+                    />
+                  </div>
+
+                  {/* Item Details */}
+                  <div style={{ padding: '1.25rem' }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '0.5rem'
                     }}>
-                      {item.name || item.title}
-                    </h4>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontSize: '1.25rem',
-                        fontWeight: '700',
-                        color: '#c9a26d'
+                      <h4 style={{
+                        margin: 0,
+                        fontSize: '1.1rem',
+                        fontWeight: '600',
+                        color: '#333',
+                        lineHeight: '1.3'
                       }}>
-                        RM {item.price}
-                      </div>
-                      {item.originalPrice && (
+                        {item.name || item.title}
+                      </h4>
+                      <div style={{ textAlign: 'right' }}>
                         <div style={{
-                          fontSize: '0.875rem',
-                          color: '#999',
-                          textDecoration: 'line-through'
+                          fontSize: '1.25rem',
+                          fontWeight: '700',
+                          color: '#c9a26d'
                         }}>
-                          RM {item.originalPrice}
+                          RM {item.price}
                         </div>
-                      )}
+                        {item.originalPrice && (
+                          <div style={{
+                            fontSize: '0.875rem',
+                            color: '#999',
+                            textDecoration: 'line-through'
+                          }}>
+                            RM {item.originalPrice}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      marginBottom: '0.75rem'
+                    }}>
+                      <Star size={14} fill="#ffd700" color="#ffd700" />
+                      <span style={{ fontSize: '0.875rem', color: '#666' }}>
+                        {item.rating ? `${item.rating} • ` : ''}{item.seller}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      marginBottom: '0.75rem',
+                      flexWrap: 'wrap'
+                    }}>
+                      <span style={{
+                        background: '#f9f7f1',
+                        color: '#c9a26d',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '500'
+                      }}>
+                        {item.condition}
+                      </span>
+                      <span style={{
+                        background: '#f9f9f9',
+                        color: '#666',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem'
+                      }}>
+                        Size {item.size}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      color: '#888',
+                      fontSize: '0.875rem'
+                    }}>
+                      <MapPin size={12} />
+                      {item.location}
                     </div>
                   </div>
-
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.5rem',
-                    marginBottom: '0.75rem'
-                  }}>
-                    <Star size={14} fill="#ffd700" color="#ffd700" />
-                    <span style={{ fontSize: '0.875rem', color: '#666' }}>
-                      {item.rating ? `${item.rating} • ` : ''}{item.seller}
-                    </span>
-                  </div>
-
-                  <div style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    marginBottom: '0.75rem',
-                    flexWrap: 'wrap'
-                  }}>
-                    <span style={{
-                      background: '#f9f7f1',
-                      color: '#c9a26d',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: '500'
-                    }}>
-                      {item.condition}
-                    </span>
-                    <span style={{
-                      background: '#f9f9f9',
-                      color: '#666',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem'
-                    }}>
-                      Size {item.size}
-                    </span>
-                  </div>
-
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    color: '#888',
-                    fontSize: '0.875rem'
-                  }}>
-                    <MapPin size={12} />
-                    {item.location}
-                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
 
@@ -558,15 +624,18 @@ const HomePage = () => {
                       <div>Minimum Increment: RM {bid.minIncrement}</div>
                       <div>End Date: {bid.endDate}</div>
                     </div>
-                    <button style={{
-                      background: "#c9a26d",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "0.5rem 1.5rem",
-                      fontWeight: "bold",
-                      cursor: "pointer"
-                    }}>
+                    <button
+                      style={{
+                        background: "#c9a26d",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "0.5rem 1.5rem",
+                        fontWeight: "bold",
+                        cursor: "pointer"
+                      }}
+                      onClick={() => router.push(`/view_item?id=${bid.id}`)}
+                    >
                       Start Bidding
                     </button>
                   </div>
@@ -582,3 +651,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+

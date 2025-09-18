@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
 import { getAuth } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, arrayRemove, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 
 // Type for favourite item
@@ -32,32 +32,9 @@ const FavouritePage: React.FC = () => {
                 setLoading(false);
                 return;
             }
-            // Get favorite IDs
-            const favRef = doc(db, "favorites", user.uid);
-            const favSnap = await getDoc(favRef);
-            const favIds: string[] = favSnap.exists() ? favSnap.data().items || [] : [];
-            if (favIds.length === 0) {
-                setFavourites([]);
-                setLoading(false);
-                return;
-            }
-            // Fetch product details for each favorite
-            const productsRef = collection(db, "products");
-            const productsSnap = await getDocs(productsRef);
-            const items: FavouriteItem[] = [];
-            productsSnap.forEach(docSnap => {
-                if (favIds.includes(docSnap.id)) {
-                    const data = docSnap.data();
-                    items.push({
-                        id: docSnap.id,
-                        name: data.name || data.title || "",
-                        image: data.image || data.images?.[0] || "",
-                        description: data.description || "",
-                        price: data.price ? `RM ${data.price}` : "",
-                        seller: data.seller || "",
-                    });
-                }
-            });
+            const itemsRef = collection(db, "favorites", user.uid, "items");
+            const snapshot = await getDocs(itemsRef);
+            const items: FavouriteItem[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FavouriteItem));
             setFavourites(items);
             setLoading(false);
         };
@@ -66,17 +43,15 @@ const FavouritePage: React.FC = () => {
 
     const handleItemClick = (itemId: string) => {
         // Navigate to item detail page
-        router.push(`/items/${itemId}`);
+        router.push(`/view_item?id=${itemId}`);
     };
 
     const handleRemoveFavourite = async (itemId: string) => {
         const auth = getAuth();
         const user = auth.currentUser;
         if (!user) return;
-        const favRef = doc(db, "favorites", user.uid);
-        await updateDoc(favRef, {
-            items: arrayRemove(itemId)
-        });
+        const itemRef = doc(db, "favorites", user.uid, "items", itemId);
+        await deleteDoc(itemRef);
         setFavourites(prev => prev.filter(item => item.id !== itemId));
     };
 
@@ -194,7 +169,7 @@ const FavouritePage: React.FC = () => {
                                     }}
                                 >
                                     <img
-                                        src={item.image}
+                                        src={item.image || item.images?.[0] || "https://via.placeholder.com/120"}
                                         alt={item.name}
                                         width={120}
                                         height={120}
@@ -218,8 +193,8 @@ const FavouritePage: React.FC = () => {
                                             </p>
                                         )}
                                     </div>
+                                    {/* Heart icon for removing favourite */}
                                     <button
-                                        type="button"
                                         onClick={e => {
                                             e.stopPropagation();
                                             handleRemoveFavourite(item.id);
@@ -228,18 +203,26 @@ const FavouritePage: React.FC = () => {
                                             position: "absolute",
                                             top: "16px",
                                             right: "16px",
-                                            background: "#fff",
-                                            border: "1px solid #c9a26d",
-                                            color: "#c9a26d",
-                                            borderRadius: "8px",
-                                            padding: "4px 10px",
-                                            fontWeight: "bold",
+                                            background: "none",
+                                            border: "none",
                                             cursor: "pointer",
-                                            fontSize: "0.9rem"
+                                            padding: 0
                                         }}
-                                        title="Remove from favourites"
+                                        title="Remove from Favourites"
                                     >
-                                        Remove
+                                        <svg
+                                            width="28"
+                                            height="28"
+                                            viewBox="0 0 24 24"
+                                            fill="#ff4757"
+                                            stroke="#ff4757"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            style={{ display: "block" }}
+                                        >
+                                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                        </svg>
                                     </button>
                                 </li>
                             ))}

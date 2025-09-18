@@ -193,7 +193,7 @@ const SellFormPage: React.FC = () => {
                     audience,
                     images: imageUrls,
                     defectImage: defectImageUrl,
-                    userId: user.uid,
+                    sellerId: user.uid, // <-- Use sellerId instead of userId
                     createdAt: new Date(),
                 };
 
@@ -201,7 +201,7 @@ const SellFormPage: React.FC = () => {
                 await addDoc(collection(db, "products"), formData);
 
                 setSuccessMessage("Your item has been successfully submitted!");
-                setShowPopup(true); // Show popup
+                setShowPopup(true);
                 handleReset();
             } catch (error) {
                 console.error("Error submitting form: ", error);
