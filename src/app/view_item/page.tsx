@@ -17,6 +17,8 @@ interface ItemDetail {
     images: string[];
     category: string;
     condition: string;
+    brand?: string;
+    size?: string;
     seller: {
         username: string;
         rating: number;
@@ -94,7 +96,9 @@ export default function ViewItemPage() {
                     condition: data.condition || "",
                     seller,
                     specifications: data.specifications || {},
-                    reviews: data.reviews || []
+                    reviews: data.reviews || [],
+                    brand: data.brand || "",   // <-- add this line
+                    size: data.size || ""      // <-- add this line
                 });
             } else {
                 // Try bids collection
@@ -138,6 +142,7 @@ export default function ViewItemPage() {
                         minIncrement: Number(data.minIncrement) || 1,
                         endDate: data.endDate || "",
                         bids: data.bids || []
+                         
                     });
 
                     setBidAmount((Number(data.currentBid) || 0) + (Number(data.minIncrement) || 1));
@@ -185,8 +190,15 @@ export default function ViewItemPage() {
         alert("Item added to your cart!");
     };
 
-    const handleBuyNow = () => {
-        router.push(`/checkout?id=${itemId}`);
+    const handleBuyNow = async () => {
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) {
+            alert("Please log in to buy items.");
+            return;
+        }
+        // Do NOT add to cart!
+        router.push(`/checkout?id=${itemId}&type=product`);
     };
 
     // Bidding actions
@@ -310,7 +322,7 @@ export default function ViewItemPage() {
                         <div>
                             <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "8px" }}>{item.name}</h1>
                             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
-                                <span style={{ fontSize: "2rem", fontWeight: "bold", color: "#d32f2f" }}>RM {item.price}</span>
+                                <span style={{ fontSize: "2rem", fontWeight: "normal", color: "#121212" }}>RM {item.price}</span>
                                 <span style={{
                                     background: "#e0f2f1",
                                     color: "#388e3c",
@@ -353,7 +365,7 @@ export default function ViewItemPage() {
                                 <button
                                     style={{
                                         flex: 1,
-                                        background: "#1976d2",
+                                        background: "#cd984d",
                                         color: "#fff",
                                         padding: "12px",
                                         borderRadius: "8px",
@@ -369,7 +381,7 @@ export default function ViewItemPage() {
                                 <button
                                     style={{
                                         flex: 1,
-                                        background: "#d32f2f",
+                                        background: "#008080",
                                         color: "#fff",
                                         padding: "12px",
                                         borderRadius: "8px",
@@ -388,16 +400,27 @@ export default function ViewItemPage() {
                             <div style={{ borderTop: "1px solid #eee", paddingTop: "18px" }}>
                                 <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Specifications</h3>
                                 <div>
-                                    {Object.entries(item.specifications).length === 0 ? (
-                                        <span style={{ color: "#888" }}>No specifications provided.</span>
-                                    ) : (
-                                        Object.entries(item.specifications).map(([key, value]) => (
+                                    {/* Brand, Size, Category from product fields */}
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Brand:</span>
+                                        <span>{item.brand || "N/A"}</span>
+                                    </div>
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Size:</span>
+                                        <span>{item.size || "N/A"}</span>
+                                    </div>
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Category:</span>
+                                        <span>{item.category || "N/A"}</span>
+                                    </div>
+                                    {/* Other specifications */}
+                                    {item.specifications && Object.entries(item.specifications)
+                                        .map(([key, value]) => (
                                             <div key={key} style={{ display: "flex", marginBottom: "6px" }}>
                                                 <span style={{ width: "120px", color: "#666" }}>{key}:</span>
                                                 <span>{value}</span>
                                             </div>
-                                        ))
-                                    )}
+                                        ))}
                                 </div>
                             </div>
                         </div>
@@ -463,11 +486,13 @@ export default function ViewItemPage() {
             if (!hasBids) {
                 // No bids, remove from bidding list (hide from bidders)
                 return (
-                    <div>
+                    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
                         <Navbar />
-                        <div style={{ textAlign: "center", padding: "64px" }}>
-                            <h2>Bidding Ended</h2>
-                            <p>No bids were placed. This item is no longer available.</p>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ textAlign: "center", padding: "64px" }}>
+                                <h2>Bidding Ended</h2>
+                                <p>No bids were placed. This item is no longer available.</p>
+                            </div>
                         </div>
                         <Footer />
                     </div>
@@ -475,39 +500,41 @@ export default function ViewItemPage() {
             } else {
                 // There are bids, show winner and proceed to checkout
                 return (
-                    <div>
+                    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
                         <Navbar />
-                        <div style={{ textAlign: "center", padding: "64px" }}>
-                            <h2>Bidding Ended</h2>
-                            <p>
-                                Winner: <strong>{highestBidderUsername}</strong> <br />
-                                Winning Bid: <strong>RM {highestBid?.amount}</strong>
-                            </p>
-                            <button
-                                style={{
-                                    background: "#1976d2",
-                                    color: "#fff",
-                                    padding: "12px 32px",
-                                    borderRadius: "8px",
-                                    border: "none",
-                                    fontWeight: "bold",
-                                    fontSize: "1.1rem",
-                                    cursor: "pointer",
-                                    marginTop: "24px"
-                                }}
-                                onClick={() => {
-                                    // Only allow winner to proceed
-                                    const auth = getAuth();
-                                    const user = auth.currentUser;
-                                    if (user && highestBid && user.uid === highestBid.userId) {
-                                        window.location.href = `/checkout?id=${bidItem.id}&type=bid`;
-                                    } else {
-                                        alert("Only the winning bidder can proceed to checkout.");
-                                    }
-                                }}
-                            >
-                                Proceed to Checkout
-                            </button>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ textAlign: "center", padding: "64px" }}>
+                                <h2>Bidding Ended</h2>
+                                <p>
+                                    Winner: <strong>{highestBidderUsername}</strong> <br />
+                                    Winning Bid: <strong>RM {highestBid?.amount}</strong>
+                                </p>
+                                <button
+                                    style={{
+                                        background: "#cd984d",
+                                        color: "#fff",
+                                        padding: "12px 32px",
+                                        borderRadius: "8px",
+                                        border: "none",
+                                        fontWeight: "bold",
+                                        fontSize: "1.1rem",
+                                        cursor: "pointer",
+                                        marginTop: "24px"
+                                    }}
+                                    onClick={() => {
+                                        // Only allow winner to proceed
+                                        const auth = getAuth();
+                                        const user = auth.currentUser;
+                                        if (user && highestBid && user.uid === highestBid.userId) {
+                                            window.location.href = `/checkout?id=${bidItem.id}&type=bid`;
+                                        } else {
+                                            alert("Only the winning bidder can proceed to checkout.");
+                                        }
+                                    }}
+                                >
+                                    Proceed to Checkout
+                                </button>
+                            </div>
                         </div>
                         <Footer />
                     </div>
@@ -680,7 +707,28 @@ export default function ViewItemPage() {
                             <div style={{ borderTop: "1px solid #eee", paddingTop: "18px" }}>
                                 <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Specifications</h3>
                                 <div>
-                                    <span style={{ color: "#888" }}>No specifications provided.</span>
+                                    {/* Brand, Size, Category */}
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Brand:</span>
+                                        <span>{bidItem.specifications?.brand || "N/A"}</span>
+                                    </div>
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Size:</span>
+                                        <span>{bidItem.specifications?.size || "N/A"}</span>
+                                    </div>
+                                    <div style={{ display: "flex", marginBottom: "6px" }}>
+                                        <span style={{ width: "120px", color: "#666" }}>Category:</span>
+                                        <span>{bidItem.category || "N/A"}</span>
+                                    </div>
+                                    {/* Other specifications */}
+                                    {Object.entries(bidItem.specifications)
+                                        .filter(([key]) => !["brand", "size"].includes(key.toLowerCase()))
+                                        .map(([key, value]) => (
+                                            <div key={key} style={{ display: "flex", marginBottom: "6px" }}>
+                                                <span style={{ width: "120px", color: "#666" }}>{key}:</span>
+                                                <span>{value}</span>
+                                            </div>
+                                        ))}
                                 </div>
                             </div>
                         </div>

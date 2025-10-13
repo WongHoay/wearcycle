@@ -15,9 +15,21 @@ interface CartItem {
     size: string;
 }
 
+const checkboxStyle = {
+    accentColor: "#008080",
+    width: "22px",
+    height: "22px",
+    borderRadius: "6px",
+    border: "2px solid #008080",
+    cursor: "pointer",
+    marginRight: "4px",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.07)"
+};
+
 export default function CartPage() {
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const router = useRouter();
 
     useEffect(() => {
@@ -73,7 +85,24 @@ export default function CartPage() {
         setCartItems(prev => prev.filter(item => item.id !== id));
     };
 
-    const totalPrice = cartItems.reduce((sum, item) => sum + item.price, 0);
+    const handleCheckboxChange = (id: string) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(itemId => itemId !== id) : [...prev, id]
+        );
+    };
+
+    const totalPrice = cartItems
+        .filter(item => selectedIds.includes(item.id))
+        .reduce((sum, item) => sum + item.price, 0);
+
+    const handleCheckout = () => {
+        if (selectedIds.length === 0) {
+            alert("Please select at least one item to checkout.");
+            return;
+        }
+        localStorage.setItem("checkoutItems", JSON.stringify(selectedIds));
+        router.push("/checkout");
+    };
 
     return (
         <>
@@ -97,6 +126,7 @@ export default function CartPage() {
                             <table className="w-full mb-8">
                                 <thead>
                                     <tr className="border-b">
+                                        <th className="py-2 text-center"></th>
                                         <th className="py-2 text-left">Product</th>
                                         <th className="py-2 text-center">Size</th>
                                         <th className="py-2 text-center">Price</th>
@@ -106,6 +136,14 @@ export default function CartPage() {
                                 <tbody>
                                     {cartItems.map(item => (
                                         <tr key={item.id} className="border-b">
+                                            <td className="py-4 text-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.includes(item.id)}
+                                                    onChange={() => handleCheckboxChange(item.id)}
+                                                    style={checkboxStyle}
+                                                />
+                                            </td>
                                             <td className="py-4 flex items-center">
                                                 <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded mr-4" />
                                                 <span className="font-medium">{item.name}</span>
@@ -125,10 +163,12 @@ export default function CartPage() {
                                 </tbody>
                             </table>
                             <div className="flex justify-between items-center">
-                                <span className="text-xl font-bold">Total: RM {totalPrice.toFixed(2)}</span>
+                                <span className="text-xl font-bold">
+                                    Total: RM {totalPrice.toFixed(2)}
+                                </span>
                                 <button
                                     className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 font-semibold"
-                                    onClick={() => router.push("/checkout")}
+                                    onClick={handleCheckout}
                                 >
                                     Checkout
                                 </button>

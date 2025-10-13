@@ -150,19 +150,19 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
   const styles: any = {
     userProfileView: { minHeight: "100vh", background: "#f5f5f5", display: "flex", flexDirection: "column" },
     profileHeaderBg: {},
-    container: { maxWidth: 1600, margin: "0 auto", padding: 120, flex: 1 }, // <-- larger container
+    container: { maxWidth: 4000, margin: "0 auto", padding: 120, flex: 1 },
     profileCard: {
       background: "#fff",
       borderRadius: 16,
-      padding: 120,                // <-- much larger padding
+      padding: 160,                // <-- much larger padding
       boxShadow: "0 2px 16px #eee",
       marginBottom: 48,
-      maxWidth: 1600,              // <-- much wider card
+      maxWidth: 3800,              // <-- much wider card
       width: "100%",
       marginLeft: "auto",
       marginRight: "auto"
     },
-    profileInfoSection: { display: "flex", alignItems: "center", marginBottom: 16 },
+    profileInfoSection: { display:"flex", alignItems: "center", marginBottom: 16 },
     profileAvatar: { marginRight: 24 },
     avatarImage: { width: 80, height: 80, borderRadius: "50%", objectFit: "cover" },
     avatarPlaceholder: { width: 80, height: 80, borderRadius: "50%", background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 },
@@ -225,7 +225,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <img src={userData.profilePhotoUrl} alt="Profile" style={styles.avatarImage} />
               ) : (
                 <div style={styles.avatarPlaceholder}>
-                  🎃
+                  {/* 🎃 */}
                 </div>
               )}
             </div>

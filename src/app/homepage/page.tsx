@@ -67,7 +67,13 @@ const HomePage = () => {
     const fetchBidding = async () => {
       const q = query(collection(db, "bids"), orderBy("createdAt", "desc"), limit(3));
       const snapshot = await getDocs(q);
-      setBiddingItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BidItem)));
+      const now = new Date();
+      setBiddingItems(snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Parse endDate as Date
+        const isExpired = data.endDate && new Date(data.endDate) < now;
+        return { id: doc.id, ...data, isExpired } as BidItem & { isExpired: boolean };
+      }));
     };
     const fetchFavorites = async () => {
       const auth = getAuth();
@@ -215,23 +221,163 @@ const HomePage = () => {
                   width: '100%'
                 }}
               />
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                style={{
-                  background: showFilters ? '#8b7355' : '#f0f0f0',
-                  color: showFilters ? 'white' : '#666',
-                  border: 'none',
-                  padding: '0.5rem',
-                  borderRadius: '50%',
-                  cursor: 'pointer',
-                  marginRight: '0.5rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
+              <div
+                style={{ position: 'relative', marginRight: '0.5rem' }}
+                onMouseEnter={() => setShowFilters(true)}
+                onMouseLeave={() => setShowFilters(false)}
               >
-                <Filter size={18} />
-              </button>
+                <button
+                  style={{
+                    background: showFilters ? '#8b7355' : '#f0f0f0',
+                    color: showFilters ? 'white' : '#666',
+                    border: 'none',
+                    padding: '0.5rem',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  tabIndex={-1}
+                  type="button"
+                >
+                  <Filter size={18} />
+                </button>
+                {/* Filters Panel (hover dropdown) */}
+                {showFilters && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '110%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: 'rgba(255, 255, 255, 0.95)',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '20px',
+                      padding: '2rem',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+                      maxWidth: '600px',
+                      minWidth: '400px',
+                      zIndex: 100
+                    }}
+                    onMouseEnter={() => setShowFilters(true)}
+                    onMouseLeave={() => setShowFilters(false)}
+                  >
+                    <h3 style={{ marginBottom: '1.5rem', color: '#333' }}>Filters</h3>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                      gap: '1.5rem'
+                    }}>
+                      {/* Category Filter */}
+                      <div>
+                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
+                          Category
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {categories.map(category => (
+                            <button
+                              key={category}
+                              onClick={() => handleFilterChange('category', category)}
+                              style={{
+                                padding: '0.4rem 0.8rem',
+                                border: `1px solid ${selectedFilters.category === category ? '#c9a26d' : '#ddd'}`,
+                                background: selectedFilters.category === category ? '#c9a26d' : 'white',
+                                color: selectedFilters.category === category ? 'white' : '#333',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {category}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Condition Filter */}
+                      <div>
+                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
+                          Condition
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {conditions.map(condition => (
+                            <button
+                              key={condition}
+                              onClick={() => handleFilterChange('condition', condition)}
+                              style={{
+                                padding: '0.4rem 0.8rem',
+                                border: `1px solid ${selectedFilters.condition === condition ? '#c9a26d' : '#ddd'}`,
+                                background: selectedFilters.condition === condition ? '#c9a26d' : 'white',
+                                color: selectedFilters.condition === condition ? 'white' : '#333',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {condition}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Brand Filter */}
+                      <div>
+                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
+                          Brand
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {brands.map(brand => (
+                            <button
+                              key={brand}
+                              onClick={() => handleFilterChange('brand', brand)}
+                              style={{
+                                padding: '0.4rem 0.8rem',
+                                border: `1px solid ${selectedFilters.brand === brand ? '#c9a26d' : '#ddd'}`,
+                                background: selectedFilters.brand === brand ? '#c9a26d' : 'white',
+                                color: selectedFilters.brand === brand ? 'white' : '#333',
+                                borderRadius: '20px',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {brand}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+                      <button
+                        onClick={() => setSelectedFilters({
+                          category: '', condition: '', brand: ''
+                        })}
+                        style={{
+                          background: 'transparent',
+                          color: '#666',
+                          border: '1px solid #ddd',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Clear All
+                      </button>
+                      <button style={{
+                        background: '#c9a26d',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '8px',
+                        cursor: 'pointer'
+                      }} onClick={() => setAppliedFilters(selectedFilters)}>
+                        Apply Filters
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button style={{
                 background: '#c9a26d',
                 color: 'white',
@@ -246,136 +392,6 @@ const HomePage = () => {
             </div>
           </div>
         </section>
-
-        {/* Filters Panel */}
-        {showFilters && (
-          <section style={{
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(10px)',
-            margin: '0 2rem 2rem',
-            borderRadius: '20px',
-            padding: '2rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-            maxWidth: '1200px',
-            marginLeft: 'auto',
-            marginRight: 'auto'
-          }}>
-            <h3 style={{ marginBottom: '1.5rem', color: '#333' }}>Filters</h3>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: '2rem'
-            }}>
-              {/* Category Filter */}
-              <div>
-                <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                  Category
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {categories.map(category => (
-                    <button
-                      key={category}
-                      onClick={() => handleFilterChange('category', category)}
-                      style={{
-                        padding: '0.4rem 0.8rem',
-                        border: `1px solid ${selectedFilters.category === category ? '#c9a26d' : '#ddd'}`,
-                        background: selectedFilters.category === category ? '#c9a26d' : 'white',
-                        color: selectedFilters.category === category ? 'white' : '#333',
-                        borderRadius: '20px',
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Condition Filter */}
-              <div>
-                <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                  Condition
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {conditions.map(condition => (
-                    <button
-                      key={condition}
-                      onClick={() => handleFilterChange('condition', condition)}
-                      style={{
-                        padding: '0.4rem 0.8rem',
-                        border: `1px solid ${selectedFilters.condition === condition ? '#c9a26d' : '#ddd'}`,
-                        background: selectedFilters.condition === condition ? '#c9a26d' : 'white',
-                        color: selectedFilters.condition === condition ? 'white' : '#333',
-                        borderRadius: '20px',
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {condition}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Brand Filter */}
-              <div>
-                <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                  Brand
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {brands.map(brand => (
-                    <button
-                      key={brand}
-                      onClick={() => handleFilterChange('brand', brand)}
-                      style={{
-                        padding: '0.4rem 0.8rem',
-                        border: `1px solid ${selectedFilters.brand === brand ? '#c9a26d' : '#ddd'}`,
-                        background: selectedFilters.brand === brand ? '#c9a26d' : 'white',
-                        color: selectedFilters.brand === brand ? 'white' : '#333',
-                        borderRadius: '20px',
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {brand}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-              <button
-                onClick={() => setSelectedFilters({
-                  category: '', condition: '', brand: ''
-                })}
-                style={{
-                  background: 'transparent',
-                  color: '#666',
-                  border: '1px solid #ddd',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                Clear All
-              </button>
-              <button style={{
-                background: '#c9a26d',
-                color: 'white',
-                border: 'none',
-                padding: '0.5rem 1rem',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }} onClick={() => setAppliedFilters(selectedFilters)}>
-                Apply Filters
-              </button>
-            </div>
-          </section>
-        )}
 
         {/* Featured Items */}
         <section style={{

@@ -78,7 +78,7 @@ const Navbar: React.FC = () => {
                   </div>
                 </Link>
                 <div style={{ padding: "4px 20px", fontWeight: "bold", color: "#888", fontSize: "13px" }}>Buying</div>
-                <Link href="/purchases" style={{ textDecoration: "none", color: "#222" }}>
+                <Link href="/my_purchases" style={{ textDecoration: "none", color: "#222" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px", cursor: "pointer" }}>
                     <ShoppingBag size={18} /> My purchases
                   </div>
