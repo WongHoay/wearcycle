@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import {getAuth} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import {getMessaging, getToken, onMessage, isSupported} from "firebase/messaging";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -21,3 +22,16 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export const messaging = getMessaging(app);
+
+// // Initialize messaging with support check
+// export const initializeMessaging = async () => {
+//   const supported = await isSupported();
+//   if (supported) {
+//     return getMessaging(app);
+//   }
+//   console.warn('Firebase Messaging is not supported in this browser');
+//   return null;
+// };
+
+// export default app;

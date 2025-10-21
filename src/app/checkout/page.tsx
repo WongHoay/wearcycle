@@ -502,18 +502,51 @@ export default function CheckoutPage() {
             <button
               type="button"
               style={{
-                background: "#111",
-                color: "#fff",
-                padding: "14px 32px",
-                borderRadius: "8px",
-                border: "none",
-                fontWeight: "bold",
-                fontSize: "1.1rem",
-                cursor: "pointer",
-                width: "100%",
-                marginTop: "0.5rem"
+              background: "#111",
+              color: "#fff",
+              padding: "14px 32px",
+              borderRadius: "8px",
+              border: "none",
+              fontWeight: "bold",
+              fontSize: "1.1rem",
+              cursor: "pointer",
+              width: "100%",
+              marginTop: "0.5rem"
               }}
-              onClick={() => alert("Continue to payment...")}
+              onClick={() => {
+                // Validate shipping information
+                if (!fullName || !address || !zipCode || !state || !phone) {
+                  alert("Please fill in all shipping information fields");
+                  return;
+                }
+
+                const params = new URLSearchParams();
+                params.set('amount', totalAmount.toString());
+                
+                // Pass buyer and shipping information
+                params.set('buyerName', fullName);
+                params.set('buyerPhone', phone);
+                params.set('shippingAddress', JSON.stringify({
+                  fullName,
+                  addressLine1: address,
+                  city: '', // You might want to add a city field
+                  state,
+                  postalCode: zipCode,
+                  country: 'Malaysia', // Default to Malaysia
+                  phone
+                }));
+                
+                // Pass item information
+                if (itemId && itemType) {
+                  params.set('id', itemId);
+                  params.set('type', itemType);
+                } else {
+                  // For cart items, pass the cart items
+                  params.set('cartItems', JSON.stringify(cartItems.map(item => item.id)));
+                }
+                
+                window.location.href = `/payment?${params.toString()}`;
+              }}
             >
               Continue to Payment
             </button>
