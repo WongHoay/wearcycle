@@ -32,6 +32,7 @@ interface Payout {
     itemName?: string;
   };
   adminNotes?: string;
+  paymentProofUrl?: string;
 }
 
 const PLATFORM_FEE_RATE = 0.10; // 10%
@@ -48,10 +49,28 @@ const AdminPayoutsPage = () => {
     transactionId: '',
     adminNotes: ''
   });
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string>("");
 
   useEffect(() => {
     fetchPayouts();
   }, []);
+
+  const handlePaymentProofUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "unsigned_preset3"); // set in Cloudinary dashboard
+
+    const res = await fetch("https://api.cloudinary.com/v1_1/dez1qts8e/image/upload", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    setPaymentProofUrl(data.secure_url); // Save URL to state
+    setPaymentDetails({
+      ...paymentDetails,
+      adminNotes: paymentDetails.adminNotes + `\nPayment proof uploaded: ${file.name}`,
+    });
+  };
 
   const fetchPayouts = async () => {
     try {
@@ -99,7 +118,8 @@ const AdminPayoutsPage = () => {
     try {
       const updateData: any = {
         status,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        paymentProofUrl, // <-- add this field
       };
       if (status === 'processing') {
         updateData.paymentMethod = paymentDetails.paymentMethod;
@@ -112,23 +132,39 @@ const AdminPayoutsPage = () => {
         updateData.adminNotes = paymentDetails.adminNotes;
       }
       await updateDoc(doc(db, 'payouts', payoutId), updateData);
-      alert(`✅ Payout ${status === 'paid' ? 'completed' : status} successfully!`);
+      
+      // 📧 Send enhanced email notification if payout is marked as paid
+      if (status === 'paid' && selectedPayout?.sellerEmail) {
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'payout_paid',
+              data: {
+                sellerEmail: selectedPayout.sellerEmail,
+                sellerName: selectedPayout.sellerName,
+                amount: selectedPayout.amount,
+                platformFee: selectedPayout.platformFee,
+                grossAmount: selectedPayout.grossAmount,
+                orderId: selectedPayout.orderIds?.[0],
+                transactionId: paymentDetails.transactionId,
+                paymentMethod: paymentDetails.paymentMethod,
+                itemName: selectedPayout.itemDetails?.itemName,
+                paidDate: new Date().toLocaleDateString()
+              }
+            })
+          });
+          console.log("✅ Payout notification email sent to seller");
+        } catch (emailError) {
+          console.error("❌ Failed to send payout notification email:", emailError);
+        }
+      }
+      
+      alert(`✅ Payout ${status === 'paid' ? 'completed' : status} successfully!${status === 'paid' ? ' Email notification sent to seller.' : ''}`);
       setSelectedPayout(null);
       setPaymentDetails({ paymentMethod: 'qr_payment', transactionId: '', adminNotes: '' });
       fetchPayouts();
-
-      // Send email notification if payout is marked as paid
-      if (status === 'paid' && selectedPayout?.sellerEmail) {
-        await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: selectedPayout.sellerEmail,
-            subject: 'Your payout has been processed',
-            text: `Hi ${selectedPayout.sellerName}, your payout of RM ${selectedPayout.amount.toFixed(2)} has been completed.`
-          })
-        });
-      }
     } catch (error) {
       alert('Error updating payout status');
     }
@@ -205,17 +241,26 @@ const AdminPayoutsPage = () => {
         </button>
       </div>
 
-      {/* Info Note */}
+      {/* Enhanced Info Note */}
       <div style={{
         marginBottom: 20,
-        padding: 15,
+        padding: 20,
         background: '#ecfdf5',
-        borderRadius: 8,
+        borderRadius: 12,
         border: '1px solid #10b981',
         fontSize: '0.9rem',
         color: '#059669'
       }}>
-        <strong>Automatic Payout System:</strong> Payouts are created automatically when orders are marked as "completed" in the Orders page.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <CheckCircle size={20} style={{ color: '#059669' }} />
+          <strong>Automatic Payout & Notification System</strong>
+        </div>
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+          <li>Payouts are created automatically when orders are marked as "completed"</li>
+          <li>Sellers receive instant email notifications when payouts are processed</li>
+          <li>Email includes transaction details, amounts, and platform fee breakdown</li>
+          <li>Comprehensive payout tracking and status management</li>
+        </ul>
       </div>
 
       {/* Summary Cards */}
@@ -625,13 +670,10 @@ const AdminPayoutsPage = () => {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        setPaymentDetails({
-                          ...paymentDetails,
-                          adminNotes: paymentDetails.adminNotes + `\nPayment proof uploaded: ${file.name}`
-                        });
+                        await handlePaymentProofUpload(file);
                       }
                     }}
                     style={{
@@ -694,7 +736,7 @@ const AdminPayoutsPage = () => {
                       fontWeight: 600
                     }}
                   >
-                    Mark as Paid
+                    ✅ Mark as Paid & Notify
                   </button>
                   <button
                     onClick={() => handleUpdatePayoutStatus(selectedPayout.id, 'failed')}
@@ -737,6 +779,56 @@ const AdminPayoutsPage = () => {
                     </div>
                   )}
                 </div>
+                {selectedPayout.status === 'paid' && (
+                  <div style={{ 
+                    marginTop: 15, 
+                    padding: 12, 
+                    background: '#d1fae5', 
+                    borderRadius: 6,
+                    border: '1px solid #10b981'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CheckCircle size={16} style={{ color: '#059669' }} />
+                      <span style={{ color: '#059669', fontSize: '0.9rem', fontWeight: 600 }}>
+                        Email notification sent to seller
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Payment Proof */}
+            {selectedPayout.paymentProofUrl && (
+              <div style={{ marginTop: 20 }}>
+                <strong style={{ color: "#6b7280" }}>Payment Proof:</strong>
+                <div style={{ marginTop: 8 }}>
+                  <img
+                    src={selectedPayout.paymentProofUrl}
+                    alt="Payment Proof"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: 300,
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.08)"
+                    }}
+                  />
+                </div>
+                <a
+                  href={selectedPayout.paymentProofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-block",
+                    marginTop: 8,
+                    color: "#2563eb",
+                    textDecoration: "underline",
+                    fontSize: "0.95rem"
+                  }}
+                >
+                  View full image
+                </a>
               </div>
             )}
 
@@ -759,66 +851,6 @@ const AdminPayoutsPage = () => {
           </div>
         </div>
       )}
-
-      {/* Info Box */}
-      <div style={{
-        marginTop: 30,
-        padding: 25,
-        background: '#eff6ff',
-        border: '1px solid #bfdbfe',
-        borderRadius: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
-          <div style={{ padding: 8, background: '#dbeafe', borderRadius: 8 }}>
-            <CreditCard size={20} style={{ color: '#1e40af' }} />
-          </div>
-          <div style={{ fontSize: '1.1rem', color: '#1e40af', fontWeight: 600 }}>
-            Automatic Payout System
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
-          <div>
-            <h4 style={{ margin: '0 0 10px 0', color: '#1e3a8a', fontSize: '0.95rem', fontWeight: 600 }}>
-              How It Works
-            </h4>
-            <ul style={{ margin: 0, paddingLeft: 20, color: '#1e3a8a', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              <li>Payouts created automatically when orders completed</li>
-              <li>Individual payouts per product/seller</li>
-              <li>Applies 10% platform commission</li>
-              <li>Sellers receive instant notifications</li>
-            </ul>
-          </div>
-          <div>
-            <h4 style={{ margin: '0 0 10px 0', color: '#1e3a8a', fontSize: '0.95rem', fontWeight: 600 }}>
-              Payment Processing
-            </h4>
-            <ul style={{ margin: 0, paddingLeft: 20, color: '#1e3a8a', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              <li>Process payments via QR codes only</li>
-              <li>Upload payment screenshots as proof</li>
-              <li>Add transaction references and notes</li>
-              <li>Mark as processing, paid, or failed</li>
-            </ul>
-          </div>
-        </div>
-        <div style={{ 
-          marginTop: 20, 
-          padding: 15, 
-          background: '#ecfdf5', 
-          borderRadius: 8,
-          border: '1px solid #10b981'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <CheckCircle size={16} style={{ color: '#059669' }} />
-            <strong style={{ color: '#059669', fontSize: '0.9rem' }}>Benefits:</strong>
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 20, color: '#059669', fontSize: '0.85rem', lineHeight: 1.5 }}>
-            <li>No manual intervention needed - fully automated</li>
-            <li>Immediate payout creation when orders complete</li>
-            <li>Sellers get notified instantly</li>
-            <li>Reduced admin workload and faster payments</li>
-          </ul>
-        </div>
-      </div>
     </div>
   );
 };

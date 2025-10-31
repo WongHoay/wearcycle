@@ -148,11 +148,13 @@ const AdminOrdersPage = () => {
           // Create payout if seller found
           if (sellerId && itemPrice > 0) {
             const PLATFORM_FEE_RATE = 0.10;
-            const itemTotal = itemPrice;
+            let itemPriceNum = typeof itemPrice === "string" ? parseFloat(itemPrice) : itemPrice;
+            if (isNaN(itemPriceNum)) itemPriceNum = 0;
+            const itemTotal = itemPriceNum;
             const platformFee = itemTotal * PLATFORM_FEE_RATE;
             const netAmount = itemTotal - platformFee;
 
-            console.log(`💰 Calculating: ${itemPrice} - ${platformFee.toFixed(2)} = ${netAmount.toFixed(2)}`);
+            console.log(`💰 Calculating: ${itemTotal} - ${platformFee.toFixed(2)} = ${netAmount.toFixed(2)}`);
 
             if (netAmount > 0) {
               // Get seller's bank details

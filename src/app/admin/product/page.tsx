@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 
 interface Product {
@@ -28,6 +28,13 @@ const AdminProductsPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  
+  // New state for reason modals
+  const [showReasonModal, setShowReasonModal] = useState(false);
+  const [actionType, setActionType] = useState<'flag' | 'remove'>('flag');
+  const [actionProductId, setActionProductId] = useState('');
+  const [selectedReason, setSelectedReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
 
   useEffect(() => {
     fetchProducts();
@@ -92,12 +99,50 @@ const AdminProductsPage = () => {
     }
   };
 
-  const handleRemoveProduct = async (productId: string) => {
-    if (!confirm('Are you sure you want to remove this product? This action cannot be undone.')) return;
+  const sendNotificationToSeller = async (sellerId: string, type: 'product_flagged' | 'product_removed', productName: string, productId: string, reason: string) => {
+    if (!sellerId) return;
 
     try {
+      const message = type === 'product_flagged' 
+        ? `Your product "${productName}" has been flagged for review. Reason: ${reason}. Please review our guidelines and make necessary changes.`
+        : `Your product "${productName}" has been removed from the marketplace. Reason: ${reason}. Please contact support if you believe this was an error.`;
+
+      await addDoc(collection(db, 'notifications'), {
+        userId: sellerId,
+        type: type,
+        message: message,
+        productId: productId,
+        productName: productName,
+        reason: reason,
+        createdAt: new Date(),
+        read: false,
+        actionBy: 'admin' // You might want to get actual admin info
+      });
+    } catch (error) {
+      console.error('Error sending notification:', error);
+    }
+  };
+
+  const handleRemoveProduct = async (productId: string, reason: string) => {
+    try {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      // Send notification to seller before deletion
+      if (product.sellerId) {
+        await sendNotificationToSeller(
+          product.sellerId, 
+          'product_removed', 
+          product.name || product.title || 'Untitled Product',
+          productId,
+          reason
+        );
+      }
+
+      // Delete the product
       await deleteDoc(doc(db, 'products', productId));
-      alert('Product removed successfully');
+      
+      alert('Product removed successfully and seller notified');
       fetchProducts();
     } catch (error) {
       console.error('Error removing product:', error);
@@ -105,20 +150,60 @@ const AdminProductsPage = () => {
     }
   };
 
-  const handleFlagProduct = async (productId: string) => {
-    if (!confirm('Flag this product as inappropriate?')) return;
-
+  const handleFlagProduct = async (productId: string, reason: string) => {
     try {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      // Update product status
       await updateDoc(doc(db, 'products', productId), {
         status: 'flagged',
-        flaggedAt: new Date()
+        flaggedAt: new Date(),
+        flagReason: reason
       });
-      alert('Product flagged successfully');
+
+      // Send notification to seller
+      if (product.sellerId) {
+        await sendNotificationToSeller(
+          product.sellerId, 
+          'product_flagged', 
+          product.name || product.title || 'Untitled Product',
+          productId,
+          reason
+        );
+      }
+
+      alert('Product flagged successfully and seller notified');
       fetchProducts();
     } catch (error) {
       console.error('Error flagging product:', error);
       alert('Error flagging product');
     }
+  };
+
+  const openReasonModal = (type: 'flag' | 'remove', productId: string) => {
+    setActionType(type);
+    setActionProductId(productId);
+    setSelectedReason('');
+    setCustomReason('');
+    setShowReasonModal(true);
+  };
+
+  const handleReasonSubmit = () => {
+    const reason = selectedReason === 'other' ? customReason : selectedReason;
+    
+    if (!reason.trim()) {
+      alert('Please select or enter a reason');
+      return;
+    }
+
+    if (actionType === 'flag') {
+      handleFlagProduct(actionProductId, reason);
+    } else {
+      handleRemoveProduct(actionProductId, reason);
+    }
+
+    setShowReasonModal(false);
   };
 
   const getStatusColor = (status?: string) => {
@@ -130,6 +215,17 @@ const AdminProductsPage = () => {
       default: return { background: '#d1fae5', color: '#065f46' };
     }
   };
+
+  const reasonOptions = [
+    { value: 'inappropriate_content', label: 'Inappropriate Content' },
+    { value: 'spam', label: 'Spam or Duplicate Listing' },
+    { value: 'fake_product', label: 'Fake or Counterfeit Product' },
+    { value: 'prohibited_item', label: 'Prohibited Item' },
+    { value: 'misleading_description', label: 'Misleading Description' },
+    { value: 'price_manipulation', label: 'Price Manipulation' },
+    { value: 'terms_violation', label: 'Terms of Service Violation' },
+    { value: 'other', label: 'Other (specify below)' }
+  ];
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading products...</div>;
@@ -320,7 +416,7 @@ const AdminProductsPage = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleFlagProduct(product.id);
+                          openReasonModal('flag', product.id);
                         }}
                         style={{
                           flex: 1,
@@ -339,7 +435,7 @@ const AdminProductsPage = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRemoveProduct(product.id);
+                          openReasonModal('remove', product.id);
                         }}
                         style={{
                           flex: 1,
@@ -363,6 +459,132 @@ const AdminProductsPage = () => {
           ))
         )}
       </div>
+
+      {/* Reason Selection Modal */}
+      {showReasonModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+            padding: 20
+          }}
+          onClick={() => setShowReasonModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: 30,
+              borderRadius: 12,
+              maxWidth: 500,
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 20, color: '#1f2937' }}>
+              {actionType === 'flag' ? 'Flag Product' : 'Remove Product'}
+            </h2>
+            
+            <p style={{ color: '#6b7280', marginBottom: 20 }}>
+              Please select a reason for {actionType === 'flag' ? 'flagging' : 'removing'} this product:
+            </p>
+
+            <div style={{ marginBottom: 20 }}>
+              {reasonOptions.map(option => (
+                <label
+                  key={option.value}
+                  style={{
+                    display: 'block',
+                    marginBottom: 12,
+                    cursor: 'pointer',
+                    padding: '10px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 6,
+                    backgroundColor: selectedReason === option.value ? '#f0f9ff' : 'transparent',
+                    borderColor: selectedReason === option.value ? '#3b82f6' : '#e5e7eb'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="reason"
+                    value={option.value}
+                    checked={selectedReason === option.value}
+                    onChange={(e) => setSelectedReason(e.target.value)}
+                    style={{ marginRight: 8 }}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+
+            {selectedReason === 'other' && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#374151' }}>
+                  Please specify the reason:
+                </label>
+                <textarea
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                  placeholder="Enter the specific reason..."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 6,
+                    fontSize: '0.95rem',
+                    minHeight: 80,
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 25 }}>
+              <button
+                onClick={() => setShowReasonModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  background: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.95rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReasonSubmit}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  background: actionType === 'flag' ? '#f59e0b' : '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.95rem'
+                }}
+              >
+                {actionType === 'flag' ? 'Flag Product' : 'Remove Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product Details Modal */}
       {selectedProduct && (
@@ -517,8 +739,8 @@ const AdminProductsPage = () => {
                 <>
                   <button
                     onClick={() => {
-                      handleFlagProduct(selectedProduct.id);
                       setSelectedProduct(null);
+                      openReasonModal('flag', selectedProduct.id);
                     }}
                     style={{
                       flex: 1,
@@ -535,8 +757,8 @@ const AdminProductsPage = () => {
                   </button>
                   <button
                     onClick={() => {
-                      handleRemoveProduct(selectedProduct.id);
                       setSelectedProduct(null);
+                      openReasonModal('remove', selectedProduct.id);
                     }}
                     style={{
                       flex: 1,

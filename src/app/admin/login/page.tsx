@@ -20,14 +20,13 @@ const AdminLogin = () => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          const userData = userDoc.data();
-          if (userData?.role === 'admin') {
+          const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+          if (adminDoc.exists()) {
             router.push('/admin/dashboard');
             return;
           }
         } catch (error) {
-          console.error('Error checking user role:', error);
+          console.error('Error checking admin table:', error);
         }
       }
       setCheckingAuth(false);
@@ -43,8 +42,6 @@ const AdminLogin = () => {
       const auth = getAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.data();
       const adminDoc = await getDoc(doc(db, 'admins', user.uid));
       if (!adminDoc.exists()) {
         await auth.signOut();
@@ -325,16 +322,6 @@ const AdminLogin = () => {
             )}
           </button>
         </form>
-
-        {/* Footer */}
-        <div style={{
-          textAlign: 'center',
-          marginTop: '1.5rem',
-          fontSize: '0.875rem',
-          color: '#718096'
-        }}>
-          Need help? Contact system administrator
-        </div>
       </div>
     </div>
   );

@@ -12,7 +12,8 @@ import {
   DollarSign,
   Folder,
   LogOut,
-  Loader2
+  Loader2,
+  MessageSquare
 } from 'lucide-react';
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {
@@ -65,6 +66,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
     { label: 'Users', path: '/admin/user', icon: Users },
     { label: 'Orders', path: '/admin/order', icon: ShoppingBag },
     { label: 'Products', path: '/admin/product', icon: Store },
+    { label: 'Appeals', path: '/admin/appeals', icon: MessageSquare },
     { label: 'Payouts', path: '/admin/payout', icon: DollarSign },
     { label: 'Categories', path: '/admin/category', icon: Folder },
   ];
