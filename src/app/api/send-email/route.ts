@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// --- Email Functions ---
+// --- New Order Email ---
 
 async function sendNewOrderEmail(data: any) {
   console.log("sendNewOrderEmail called with:", data);
@@ -159,6 +159,7 @@ async function sendNewOrderEmail(data: any) {
   }
 }
 
+// --- Payout Email ---
 async function sendPayoutPaidEmail(data: any) {
   console.log("sendPayoutPaidEmail called with:", data);
   const { 
@@ -357,6 +358,7 @@ async function sendBidConfirmationEmail(data: any) {
   }
 }
 
+// --- Outbid Email ---
 async function sendOutbidEmail(data: any) {
   console.log("sendOutbidEmail called with:", data);
   const { bidderEmail, currentBid, itemTitle, itemId, minIncrement } = data;
@@ -392,6 +394,7 @@ async function sendOutbidEmail(data: any) {
   }
 }
 
+// --- Bid Won Email ---
 async function sendBidWonEmail(data: any) {
    console.log("sendBidWonEmail called with:", data);
   const { winnerEmail, itemTitle, itemId, winningBid } = data;
@@ -425,6 +428,7 @@ async function sendBidWonEmail(data: any) {
   }
 }
 
+// --- Bid Ended Seller Email ---
 async function sendBidEndedSellerEmail(data: any) {
    console.log("sendBidEndedSellerEmail called with:", data);
   const { sellerEmail, itemTitle, winnerName, winningBid, itemId } = data;
@@ -459,7 +463,7 @@ async function sendBidEndedSellerEmail(data: any) {
   } 
 }
 
-// --- Standardized Refund Email ---
+// --- Refund Email ---
 async function sendRefundEmail(data: any) {
   console.log("sendRefundEmail called with:", data);
   const { buyerEmail, buyerName, orderId, refundAmount } = data;
