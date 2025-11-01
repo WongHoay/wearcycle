@@ -37,7 +37,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
   listings = [],
   onUserUpdate
 }) => {
-  const [activeTab, setActiveTab] = useState<'listings' | 'insights' | 'reviews' | 'coins' | 'balance' | 'caroubiz'>('listings');
+  const [activeTab, setActiveTab] = useState<'listings' | 'insights'>('listings');
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -231,18 +231,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
             <div style={styles.profileDetails}>
               <div style={styles.profileUsername}>@{userData.username}</div>
-              <button style={styles.profileDetailsLink}>
-                Profile details <span>›</span>
-              </button>
             </div>
           </div>
           <div style={styles.profileStats}>
             <div style={styles.statItem}>
               <div style={styles.statValue}>
                 {userData.reviewCount > 0 ? userData.rating : 'N/A'}
-              </div>
-              <div style={styles.statLabel}>
-                {userData.reviewCount > 0 ? `${userData.reviewCount} reviews` : 'No review yet'}
               </div>
             </div>
             <div style={styles.statItem}>
@@ -269,30 +263,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
           >
             Insights
           </button>
-          <button 
-            style={{...styles.navTab, ...(activeTab === 'reviews' ? styles.navTabActive : {})}}
-            onClick={() => setActiveTab('reviews')}
-          >
-            Reviews
-          </button>
-          {/* <button 
-            style={{...styles.navTab, ...(activeTab === 'coins' ? styles.navTabActive : {})}}
-            onClick={() => setActiveTab('coins')}
-          >
-            Coins
-          </button>
-          <button 
-            style={{...styles.navTab, ...(activeTab === 'balance' ? styles.navTabActive : {})}}
-            onClick={() => setActiveTab('balance')}
-          >
-            Balance
-          </button> */}
-          {/* <button 
-            style={{...styles.navTab, ...(activeTab === 'caroubiz' ? styles.navTabActive : {})}}
-            onClick={() => setActiveTab('caroubiz')}
-          >
-            CarouBiz
-          </button> */}
         </div>
 
         {/* Content Section */}
@@ -372,27 +342,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <div style={styles.insightValue}>RM{user.totalEarnings}</div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'reviews' && (
-            <div>
-              <h2 style={styles.sectionTitle}>Reviews</h2>
-              {user.reviewCount === 0 ? (
-                <div style={styles.noReviews}>
-                  <p>No reviews yet. Start selling to get reviews!</p>
-                </div>
-              ) : (
-                <div style={styles.reviewsList}>
-                  <div style={styles.reviewSummary}>
-                    <div style={styles.ratingDisplay}>
-                      <span style={styles.ratingValue}>{user.rating}</span>
-                      <span style={styles.ratingStars}>★★★★★</span>
-                    </div>
-                    <p>{user.reviewCount} reviews</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>

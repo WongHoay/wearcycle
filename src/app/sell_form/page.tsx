@@ -193,7 +193,7 @@ const SellFormPage: React.FC = () => {
                     audience,
                     images: imageUrls,
                     defectImage: defectImageUrl,
-                    sellerId: user.uid, // <-- Use sellerId instead of userId
+                    sellerId: user.uid, 
                     createdAt: new Date(),
                 };
 

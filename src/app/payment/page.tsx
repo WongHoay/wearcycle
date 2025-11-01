@@ -72,6 +72,7 @@ export default function PaymentPage() {
   
   const [amount, setAmount] = useState<number>(paramAmount ? Number(paramAmount) : 0);
   const [items, setItems] = useState<string[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<"qr" | "bank">("qr");
 
   useEffect(() => {
     // Handle single product/bid purchase
@@ -320,55 +321,109 @@ export default function PaymentPage() {
           <p className="text-gray-600 mt-2">Review your order and upload payment proof</p>
         </div>
 
+        {/* Payment Method Selector */}
+        <div className="mb-6 flex gap-4">
+          <button
+            type="button"
+            className={`px-6 py-2 rounded-lg font-bold border ${
+              paymentMethod === "qr"
+                ? "bg-teal-600 text-white border-teal-600"
+                : "bg-white text-teal-600 border-teal-300"
+            }`}
+            onClick={() => setPaymentMethod("qr")}
+          >
+            QR Code
+          </button>
+          <button
+            type="button"
+            className={`px-6 py-2 rounded-lg font-bold border ${
+              paymentMethod === "bank"
+                ? "bg-teal-600 text-white border-teal-600"
+                : "bg-white text-teal-600 border-teal-300"
+            }`}
+            onClick={() => setPaymentMethod("bank")}
+          >
+            Bank Transfer
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Main Payment Section */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* QR Code Section */}
-            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
-                Scan to Pay
-              </h2>
-              
-              <div className="flex justify-center mb-4">
-                <div className="p-6 bg-gradient-to-br from-teal-50 to-blue-50 rounded-xl border-4 border-teal-500 shadow-lg">
-                  <div className="w-85 h-85 bg-white rounded-lg flex items-center justify-center">
-                    <img 
-                      src="/images/company_qr.JPG" 
-                      alt="Payment QR Code" 
-                      className="w-full h-full object-contain"
-                    />
+            {/* QR or Bank Section */}
+            {paymentMethod === "qr" ? (
+              <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  Scan to Pay
+                </h2>
+                
+                <div className="flex justify-center mb-4">
+                  <div className="p-6 bg-gradient-to-br from-teal-50 to-blue-50 rounded-xl border-4 border-teal-500 shadow-lg">
+                    <div className="w-85 h-85 bg-white rounded-lg flex items-center justify-center">
+                      <img 
+                        src="/images/company_qr.JPG" 
+                        alt="Payment QR Code" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-4 border border-teal-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Amount to Pay</p>
-                    <p className="text-3xl font-bold text-teal-600">RM {Number(amount || 0).toFixed(2)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600 mb-1">Items</p>
-                    <p className="text-2xl font-bold text-gray-700">{items.length}</p>
+                <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-4 border border-teal-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Amount to Pay</p>
+                      <p className="text-3xl font-bold text-teal-600">RM {Number(amount || 0).toFixed(2)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600 mb-1">Items</p>
+                      <p className="text-2xl font-bold text-gray-700">{items.length}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-blue-800 mb-2">📱 Payment Instructions:</p>
-                <ol className="text-sm text-blue-700 space-y-1">
-                  <li>1. Open your e-wallet app (DuitNow/TnG/Boost)</li>
-                  <li>2. Scan the QR code above</li>
-                  <li>3. Complete the payment</li>
-                  <li>4. Upload payment proof below</li>
-                </ol>
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-blue-800 mb-2">📱 Payment Instructions:</p>
+                  <ol className="text-sm text-blue-700 space-y-1">
+                    <li>1. Open your e-wallet app (DuitNow/TnG/Boost)</li>
+                    <li>2. Scan the QR code above</li>
+                    <li>3. Complete the payment</li>
+                    <li>4. Upload payment proof below</li>
+                  </ol>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  Bank Transfer
+                </h2>
+                <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-4 border border-teal-200 mb-4">
+                  <p className="text-lg font-bold text-gray-800 mb-2">Bank Details</p>
+                  <div className="text-gray-700 mb-2">
+                    <div><span className="font-semibold">Bank Name:</span> Maybank</div>
+                    <div><span className="font-semibold">Account Name:</span> WearCycle Sdn Bhd</div>
+                    <div><span className="font-semibold">Account Number:</span> 1579 3808 2179</div>
+                  </div>
+                  <p className="text-sm text-red-600">Please transfer the exact amount and upload your payment receipt below.</p>
+                </div>
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-blue-800 mb-2">🏦 Bank Transfer Instructions:</p>
+                  <ol className="text-sm text-blue-700 space-y-1">
+                    <li>1. Login to your online banking app</li>
+                    <li>2. Transfer the total amount to the bank account above</li>
+                    <li>3. Upload your payment receipt below</li>
+                  </ol>
+                </div>
+              </div>
+            )}
 
             {/* Upload Payment Proof */}
             <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">

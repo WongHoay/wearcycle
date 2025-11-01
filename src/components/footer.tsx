@@ -43,7 +43,6 @@ const Footer = () => (
 
         {/* Contact Section */}
         <div style={{
-          //background: 'rgba(255, 255, 255, 0.1)',
           borderRadius: '12px',
           padding: '1.5rem',
           textAlign: 'left'
