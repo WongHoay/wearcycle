@@ -49,6 +49,9 @@ export async function POST(request: NextRequest) {
       case 'refund':
         await sendRefundEmail(data);
         break;
+      case 'order_shipped':
+        await sendOrderShippedEmail(data);
+        break;
       default:
         return NextResponse.json({ error: 'Invalid email type' }, { status: 400 });
     }
@@ -497,6 +500,73 @@ async function sendRefundEmail(data: any) {
       console.log("Refund email sent to buyer:", buyerEmail);
     } catch (err) {
       console.error("Error sending refund email:", err);
+    }
+  }
+}
+
+// --- Order Shipped Email ---
+async function sendOrderShippedEmail(data: any) {
+  const {
+    buyerEmail,
+    buyerName,
+    orderId,
+    courier,
+    trackingNumber,
+    estimatedDelivery,
+    notes,
+    shippingAddress,
+    items,
+    totalAmount,
+    orderDate
+  } = data;
+
+  if (buyerEmail) {
+    try {
+      const itemsHtml = items.map((item: any) => `
+        <div style="margin-bottom:10px;">
+          ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;margin-right:8px;">` : ''}
+          <span style="font-weight:600;">${item.name}</span> - RM ${Number(item.price || 0).toFixed(2)}
+        </div>
+      `).join('');
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: buyerEmail,
+        subject: `Your order #${orderId.slice(-8)} has shipped!`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <h2 style="color:#388e3c;">Your Order Has Shipped!</h2>
+            <p>Hi ${buyerName}, your order <strong>#${orderId.slice(-8)}</strong> has been shipped.</p>
+            <div style="background:#f0f9ff;padding:15px;border-radius:8px;margin-bottom:16px;">
+              <strong>Courier:</strong> ${courier}<br>
+              <strong>Tracking Number:</strong> ${trackingNumber}<br>
+              ${estimatedDelivery ? `<strong>Estimated Delivery:</strong> ${estimatedDelivery}<br>` : ''}
+              ${notes ? `<strong>Notes:</strong> ${notes}<br>` : ''}
+            </div>
+            <h3 style="margin:20px 0 10px 0;">Shipping Address</h3>
+            <div style="background:#f9fafb;padding:10px;border-radius:8px;">
+              <p style="margin:0;font-weight:600;">${shippingAddress.fullName}</p>
+              <p style="margin:0;">${shippingAddress.addressLine1}</p>
+              ${shippingAddress.addressLine2 ? `<p style="margin:0;">${shippingAddress.addressLine2}</p>` : ''}
+              <p style="margin:0;">${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postalCode}</p>
+              <p style="margin:0;">${shippingAddress.country}</p>
+              ${shippingAddress.phone ? `<p style="margin:0;"><strong>Phone:</strong> ${shippingAddress.phone}</p>` : ''}
+            </div>
+            <h3 style="margin:20px 0 10px 0;">Items Shipped</h3>
+            ${itemsHtml}
+            <div style="margin:20px 0;">
+              <strong>Total: RM ${Number(totalAmount || 0).toFixed(2)}</strong>
+            </div>
+            <p style="color:#666;font-size:14px;margin-top:30px;">
+              Thank you for shopping with WearCycle!<br>
+              You can track your order status in your account.
+            </p>
+          </div>
+        `
+      });
+      console.log("✅ Order shipped email sent to buyer:", buyerEmail);
+    } catch (err) {
+      console.error("❌ Error sending order shipped email:", err);
     }
   }
 }
