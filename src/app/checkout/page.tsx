@@ -49,6 +49,7 @@ export default function CheckoutPage() {
       fetchProduct();
       return;
     }
+
     const fetchCart = async () => {
       setLoading(true);
       const auth = getAuth();
@@ -58,28 +59,36 @@ export default function CheckoutPage() {
         setLoading(false);
         return;
       }
-      const cartRef = doc(db, "carts", user.uid);
-      const cartSnap = await getDoc(cartRef);
-      if (cartSnap.exists()) {
-        const cartData = cartSnap.data();
-        const items = [];
-        for (const itemId of cartData.items || []) {
-          let itemRef = doc(db, "products", itemId);
-          let itemSnap = await getDoc(itemRef);
-          if (itemSnap.exists()) {
-            items.push({ id: itemId, ...itemSnap.data(), type: "product" });
-            continue;
-          }
-          itemRef = doc(db, "bids", itemId);
-          itemSnap = await getDoc(itemRef);
-          if (itemSnap.exists()) {
-            items.push({ id: itemId, ...itemSnap.data(), type: "bid" });
-          }
+
+      //get selected items from localStorage (set by cart page)
+      const checkoutItemsJson = localStorage.getItem("checkoutItems");
+      const selectedItemIds = checkoutItemsJson ? JSON.parse(checkoutItemsJson) : [];
+
+      if (selectedItemIds.length === 0) {
+        // Fallback: fetch all cart items if no selection found
+        const cartRef = doc(db, "carts", user.uid);
+        const cartSnap = await getDoc(cartRef);
+        if (cartSnap.exists()) {
+          const cartData = cartSnap.data();
+          selectedItemIds.push(...(cartData.items || []));
         }
-        setCartItems(items);
-      } else {
-        setCartItems([]);
       }
+
+      const items = [];
+      for (const itemId of selectedItemIds) {
+        let itemRef = doc(db, "products", itemId);
+        let itemSnap = await getDoc(itemRef);
+        if (itemSnap.exists()) {
+          items.push({ id: itemId, ...itemSnap.data(), type: "product" });
+          continue;
+        }
+        itemRef = doc(db, "bids", itemId);
+        itemSnap = await getDoc(itemRef);
+        if (itemSnap.exists()) {
+          items.push({ id: itemId, ...itemSnap.data(), type: "bid" });
+        }
+      }
+      setCartItems(items);
       setLoading(false);
     };
     fetchCart();
