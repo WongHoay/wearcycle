@@ -101,7 +101,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // If it's the login page, render children without the sidebar
+  // If it's the login page, render children without the sidebar-
   if (isLoginPage) {
     return <>{children}</>;
   }

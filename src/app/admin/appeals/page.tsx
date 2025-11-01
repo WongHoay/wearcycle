@@ -52,7 +52,7 @@ const AdminAppealsPage = () => {
 
   const fetchAppeals = async () => {
     try {
-      console.log('Fetching pending appeals...');
+      console.log('Fetching pending appeals....');
       
       // Simple query without orderBy to avoid index issues
       const appealsRef = collection(db, 'appeals');

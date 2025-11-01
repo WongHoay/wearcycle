@@ -598,7 +598,7 @@ const AdminPayoutsPage = () => {
               </div>
             )}
 
-            {/* Bank Details */}
+            {/* -Bank Details- */}
             {selectedPayout.bankDetails && (
               <div style={{ marginBottom: 30, padding: 20, background: '#eff6ff', borderRadius: 8 }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 15, color: '#1f2937' }}>

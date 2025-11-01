@@ -457,7 +457,7 @@ const AdminCategoriesPage = () => {
         </div>
       </div>
 
-      {/* Brands Table */}
+      {/* -Brands Table- */}
       <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: 30 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
