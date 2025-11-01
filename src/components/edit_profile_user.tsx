@@ -48,7 +48,7 @@ const EditProfileView: React.FC<EditProfileViewProps> = ({ user, onSave, onBack 
     return Object.keys(newErrors).length === 0;
   };
 
-  // Fix: handle photo upload from file input
+  // handle photo upload from file input
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

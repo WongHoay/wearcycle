@@ -394,7 +394,7 @@ const Navbar: React.FC = () => {
                   )}
                 </div>
 
-                {/* Footer */}
+                {/* -Footer- */}
                 {notifications.length > 0 && (
                   <div style={{
                     padding: '12px',

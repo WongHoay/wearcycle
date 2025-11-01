@@ -43,7 +43,6 @@ const Footer = () => (
 
         {/* Contact Section */}
         <div style={{
-          //background: 'rgba(255, 255, 255, 0.1)',
           borderRadius: '12px',
           padding: '1.5rem',
           textAlign: 'left'
@@ -151,45 +150,3 @@ const Footer = () => (
 );
 
 export default Footer;
-
-// import React from "react";
-
-// const Footer = () => (
-//     <footer style={{
-//         background: '#c9a26d',
-//         color: 'black',
-//         padding: '1.5rem 0',
-//         textAlign: 'center',
-//         fontSize: '1rem',
-//         marginTop: 'auto',
-//         // minHeight: "100vh",
-//         // display: "flex",
-//         // flexDirection: "column"
-//     }}>
-//         <div>
-//             &copy; {new Date().getFullYear()} WearCycle. All rights reserved.
-//         </div>
-//         <div style={{ marginTop: '7px', fontSize: '14px' }}>
-//             {/* <a
-//                 href="/privacy"
-//                 style={{ color: 'b', textDecoration: 'underline', marginRight: '1rem' }}
-//             >
-//                 Privacy Policy
-//             </a>
-//             <a
-//                 href="/terms"
-//                 style={{ color: 'black', textDecoration: 'underline' }}
-//             >
-//                 Terms of Service
-//             </a> */}
-//             <a
-//             href="mailto:wearcycle001@gmail.com"
-//             style={{ color: 'black', textDecoration: 'underline' }}
-//             >
-//                 Email Us
-//             </a>
-//         </div>
-//     </footer>
-// );
-
-// export default Footer;
