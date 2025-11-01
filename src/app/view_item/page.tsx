@@ -21,17 +21,9 @@ interface ItemDetail {
     size?: string;
     seller: {
         username: string;
-        rating: number;
         avatar: string;
     };
-    specifications: { [key: string]: string };
-    reviews: Array<{
-        id: string;
-        username: string;
-        rating: number;
-        comment: string;
-        date: string;
-    }>;
+    specifications?: Record<string, any>;
 }
 
 interface BidDetail extends ItemDetail {
@@ -43,6 +35,7 @@ interface BidDetail extends ItemDetail {
         amount: number;
         timestamp: string;
     }>;
+    specifications?: Record<string, any>;
 }
 
 export default function ViewItemPage() {
@@ -70,7 +63,6 @@ export default function ViewItemPage() {
                 // Fetch seller info from users collection
                 let seller = {
                     username: "Unknown Seller",
-                    rating: 0,
                     avatar: "/api/placeholder/50/50"
                 };
                 if (data.sellerId) {
@@ -80,7 +72,6 @@ export default function ViewItemPage() {
                         const sellerData = sellerSnap.data();
                         seller = {
                             username: sellerData.username || "Unknown Seller",
-                            rating: sellerData.rating || 0,
                             avatar: sellerData.profilePhotoUrl || "/api/placeholder/50/50"
                         };
                     }
@@ -95,10 +86,8 @@ export default function ViewItemPage() {
                     category: data.category || "",
                     condition: data.condition || "",
                     seller,
-                    specifications: data.specifications || {},
-                    reviews: data.reviews || [],
-                    brand: data.brand || "",   // <-- add this line
-                    size: data.size || ""      // <-- add this line
+                    brand: data.brand || "",  
+                    size: data.size || ""      
                 });
             } else {
                 // Try bids collection
@@ -111,7 +100,6 @@ export default function ViewItemPage() {
                     // Fetch seller info
                     let seller = {
                         username: "Unknown Seller",
-                        rating: 0,
                         avatar: "/api/placeholder/50/50"
                     };
                     if (data.sellerId) {
@@ -121,7 +109,6 @@ export default function ViewItemPage() {
                             const sellerData = sellerSnap.data();
                             seller = {
                                 username: sellerData.username || "Unknown Seller",
-                                rating: sellerData.rating || 0,
                                 avatar: sellerData.profilePhotoUrl || "/api/placeholder/50/50"
                             };
                         }
@@ -137,7 +124,6 @@ export default function ViewItemPage() {
                         condition: data.condition || "",
                         seller,
                         specifications: data.specifications || {},
-                        reviews: data.reviews || [],
                         currentBid: Number(data.currentBid) || 0,
                         minIncrement: Number(data.minIncrement) || 1,
                         endDate: data.endDate || "",
@@ -352,12 +338,7 @@ export default function ViewItemPage() {
                                     height={40}
                                     style={{ borderRadius: "50%" }}
                                 />
-                                <div>
-                                    <div style={{ fontWeight: "600" }}>{item.seller.username}</div>
-                                    <div style={{ fontSize: "0.95rem", color: "#666" }}>
-                                        ⭐ {item.seller.rating} rating
-                                    </div>
-                                </div>
+                                <span style={{ fontWeight: "500" }}>{item.seller.username}</span>
                             </div>
 
                             {/* Action Buttons */}
@@ -430,41 +411,6 @@ export default function ViewItemPage() {
                     <div style={{ marginTop: "40px", borderTop: "1px solid #eee", paddingTop: "24px" }}>
                         <h3 style={{ fontSize: "1.3rem", fontWeight: "600", marginBottom: "12px" }}>Description</h3>
                         <p style={{ color: "#444", fontSize: "1rem", lineHeight: "1.7" }}>{item.description}</p>
-                    </div>
-
-                    {/* Reviews */}
-                    <div style={{ marginTop: "40px", borderTop: "1px solid #eee", paddingTop: "24px" }}>
-                        <h3 style={{ fontSize: "1.3rem", fontWeight: "600", marginBottom: "16px" }}>Reviews</h3>
-                        <div>
-                            {item.reviews.length === 0 ? (
-                                <span style={{ color: "#888" }}>No reviews yet.</span>
-                            ) : (
-                                item.reviews.map((review) => (
-                                    <div key={review.id} style={{
-                                        border: "1px solid #eee",
-                                        borderRadius: "8px",
-                                        padding: "16px",
-                                        marginBottom: "16px"
-                                    }}>
-                                        <div style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            marginBottom: "8px"
-                                        }}>
-                                            <span style={{ fontWeight: "600" }}>{review.username}</span>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <span style={{ color: "#fbc02d", fontSize: "1.1rem" }}>
-                                                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
-                                                </span>
-                                                <span style={{ fontSize: "0.95rem", color: "#888" }}>{review.date}</span>
-                                            </div>
-                                        </div>
-                                        <p style={{ color: "#444", fontSize: "1rem" }}>{review.comment}</p>
-                                    </div>
-                                ))
-                            )}
-                        </div>
                     </div>
                 </div>
                 <Footer />
@@ -659,12 +605,6 @@ export default function ViewItemPage() {
                                     height={40}
                                     style={{ borderRadius: "50%" }}
                                 />
-                                <div>
-                                    <div style={{ fontWeight: "600" }}>{bidItem.seller.username}</div>
-                                    <div style={{ fontSize: "0.95rem", color: "#666" }}>
-                                        ⭐ {bidItem.seller.rating} rating
-                                    </div>
-                                </div>
                             </div>
 
                             {/* Place Bid Form */}
@@ -721,7 +661,7 @@ export default function ViewItemPage() {
                                         <span>{bidItem.category || "N/A"}</span>
                                     </div>
                                     {/* Other specifications */}
-                                    {Object.entries(bidItem.specifications)
+                                    {Object.entries(bidItem.specifications || {})
                                         .filter(([key]) => !["brand", "size"].includes(key.toLowerCase()))
                                         .map(([key, value]) => (
                                             <div key={key} style={{ display: "flex", marginBottom: "6px" }}>

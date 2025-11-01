@@ -274,7 +274,7 @@ export default function CartPage() {
                                         <button
                                             className={`mt-4 w-full py-3 rounded-lg font-bold text-white text-lg transition shadow-lg ${
                                                 sellerSelectedCount === 0
-                                                    ? "bg-gray-300 cursor-not-allowed"
+                                                    ? "bg-gray-500 cursor-not-allowed"
                                                     : "bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800"
                                             }`}
                                             disabled={sellerSelectedCount === 0}

@@ -394,7 +394,7 @@ const Navbar: React.FC = () => {
                   )}
                 </div>
 
-                {/* Footer */}
+                {/* -Footer- */}
                 {notifications.length > 0 && (
                   <div style={{
                     padding: '12px',
@@ -422,7 +422,7 @@ const Navbar: React.FC = () => {
             )}
           </div>
 
-          {/* User Profile Dropdown - Your original code unchanged */}
+          {/* User Profile Dropdown */}
           <div style={{ position: "relative" }} ref={dropdownRef}>
             <button
               className="text-amber-800 hover:text-amber-900 transition-colors p-1"
@@ -472,12 +472,6 @@ const Navbar: React.FC = () => {
                 <Link href="/sales" style={{ textDecoration: "none", color: "#222" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px", cursor: "pointer" }}>
                     <List size={18} /> My sales
-                  </div>
-                </Link>
-                <div style={{ padding: "4px 20px", fontWeight: "bold", color: "#888", fontSize: "13px" }}>Account</div>
-                <Link href="/settings" style={{ textDecoration: "none", color: "#222" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px", cursor: "pointer" }}>
-                    <Settings size={18} /> Settings
                   </div>
                 </Link>
               </div>

@@ -1,11 +1,11 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Camera, AlertCircle } from "lucide-react";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
 import axios from "axios";
 import { db } from "../../firebaseConfig";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dez1qts8e/upload";
@@ -47,9 +47,10 @@ function BidForm() {
         description: "",
         endDate: "",
         price: "",
-        minIncrement: "", // <-- Add this field
+        minIncrement: "", 
         size: "",
         brand: "",
+        category: "",
     });
     const [dragActive, setDragActive] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -57,6 +58,18 @@ function BidForm() {
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [successMessage, setSuccessMessage] = useState("");
     const [showPopup, setShowPopup] = useState(false);
+    const [categories, setCategories] = useState<string[]>([]);
+    const [brands, setBrands] = useState<string[]>([]);
+
+    useEffect(() => {
+        const fetchFilters = async () => {
+            const catSnap = await getDocs(collection(db, 'categories'));
+            setCategories(catSnap.docs.map(doc => doc.data().name));
+            const brandSnap = await getDocs(collection(db, 'brands'));
+            setBrands(brandSnap.docs.map(doc => doc.data().name));
+        };
+        fetchFilters();
+    }, []);
 
     const updatePreviews = (files: File[]) => {
         const readers = files.map((file) => {
@@ -133,6 +146,7 @@ function BidForm() {
         if (!form.minIncrement.trim() || isNaN(Number(form.minIncrement)) || Number(form.minIncrement) <= 0) newErrors.minIncrement = "Minimum increment is required.";
         if (!form.size) newErrors.size = "Size is required.";
         if (!form.brand.trim()) newErrors.brand = "Brand is required.";
+        if (!form.category.trim()) newErrors.category = "Category is required.";
         if (images.length === 0) newErrors.images = "At least one image is required.";
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -205,6 +219,7 @@ function BidForm() {
             minIncrement: "",
             size: "",
             brand: "",
+            category: "",
         });
         setImagePreviews([]);
         setImages([]);
@@ -521,15 +536,9 @@ function BidForm() {
                         </div>
                         <div style={{ marginBottom: "24px" }}>
                             <label
-                                style={{
-                                    fontWeight: "500",
-                                    display: "block",
-                                    marginBottom: "8px",
-                                }}
-                            >
+                                style={{fontWeight: "500",display: "block",marginBottom: "8px",}}>
                                 Description
-                                <input
-                                    type="text"
+                                <textarea
                                     name="description"
                                     value={form.description}
                                     onChange={handleChange}
@@ -541,6 +550,7 @@ function BidForm() {
                                         borderRadius: "4px",
                                         border: "1px solid #ccc",
                                         background: "#fff",
+                                        resize: "vertical"
                                     }}
                                     placeholder="Provide a short description of the item"
                                 />
@@ -667,19 +677,13 @@ function BidForm() {
                                 </select>
                             </label>
                         </div>
+                        {/* Category Dropdown */}
                         <div style={{ marginBottom: "24px" }}>
-                            <label
-                                style={{
-                                    fontWeight: "500",
-                                    display: "block",
-                                    marginBottom: "8px",
-                                }}
-                            >
-                                Brand
-                                <input
-                                    type="text"
-                                    name="brand"
-                                    value={form.brand}
+                            <label style={{ fontWeight: "500", display: "block", marginBottom: "8px" }}>
+                                Category
+                                <select
+                                    name="category"
+                                    value={form.category || ""}
                                     onChange={handleChange}
                                     required
                                     style={{
@@ -690,8 +694,38 @@ function BidForm() {
                                         border: "1px solid #ccc",
                                         background: "#fff",
                                     }}
-                                    placeholder="Type the brand name"
-                                />
+                                >
+                                    <option value="">Select category</option>
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+
+                        {/* Brand Dropdown */}
+                        <div style={{ marginBottom: "24px" }}>
+                            <label style={{ fontWeight: "500", display: "block", marginBottom: "8px" }}>
+                                Brand
+                                <select
+                                    name="brand"
+                                    value={form.brand || ""}
+                                    onChange={handleChange}
+                                    required
+                                    style={{
+                                        width: "100%",
+                                        marginTop: "8px",
+                                        padding: "8px",
+                                        borderRadius: "4px",
+                                        border: "1px solid #ccc",
+                                        background: "#fff",
+                                    }}
+                                >
+                                    <option value="">Select brand</option>
+                                    {brands.map(brand => (
+                                        <option key={brand} value={brand}>{brand}</option>
+                                    ))}
+                                </select>
                             </label>
                         </div>
                         <div style={{ display: "flex", gap: "16px" }}>

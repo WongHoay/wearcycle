@@ -6,10 +6,12 @@ import { db } from "../../firebaseConfig";
 import Navbar from "../../components/navbar";
 import { useSearchParams } from "next/navigation";
 
+// Update UserAddress interface
 interface UserAddress {
   id: string;
   fullName?: string;
   address?: string;
+  addressLine2?: string; // New line
   zipCode?: string;
   state?: string;
   phone?: string;
@@ -20,6 +22,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [fullName, setFullName] = useState("");
   const [address, setAddress] = useState("");
+  const [addressLine2, setAddressLine2] = useState(""); // New line
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [phone, setPhone] = useState("");
@@ -127,6 +130,7 @@ export default function CheckoutPage() {
         setSelectedAddressId(addrList[0].id);
         setFullName(addrList[0].fullName || "");
         setAddress(addrList[0].address || "");
+        setAddressLine2(addrList[0].addressLine2 || ""); // New line
         setZipCode(addrList[0].zipCode || "");
         setState(addrList[0].state || "");
         setPhone(addrList[0].phone || "");
@@ -144,6 +148,7 @@ export default function CheckoutPage() {
     const newAddress = {
       fullName,
       address,
+      addressLine2, // New line
       zipCode,
       state,
       phone
@@ -166,6 +171,7 @@ export default function CheckoutPage() {
     const addr = addresses.find(a => a.id === id);
     setFullName(addr?.fullName || "");
     setAddress(addr?.address || "");
+    setAddressLine2(addr?.addressLine2 || ""); // New line
     setZipCode(addr?.zipCode || "");
     setState(addr?.state || "");
     setPhone(addr?.phone || "");
@@ -188,6 +194,7 @@ export default function CheckoutPage() {
           setSelectedAddressId(null);
           setFullName("");
           setAddress("");
+          setAddressLine2("");
           setZipCode("");
           setState("");
           setPhone("");
@@ -196,6 +203,7 @@ export default function CheckoutPage() {
         setSelectedAddressId(null);
         setFullName("");
         setAddress("");
+        setAddressLine2("");
         setZipCode("");
         setState("");
         setPhone("");
@@ -401,6 +409,7 @@ export default function CheckoutPage() {
                   setSelectedAddressId(null);
                   setFullName("");
                   setAddress("");
+                  setAddressLine2("");
                   setZipCode("");
                   setState("");
                   setPhone("");
@@ -429,12 +438,28 @@ export default function CheckoutPage() {
               />
             </div>
             <div style={{ marginBottom: "1rem" }}>
-              <label style={{ fontWeight: "bold" }}>Address</label>
+              <label style={{ fontWeight: "bold" }}>Address Line 1</label>
               <input
                 type="text"
                 value={address}
                 onChange={e => setAddress(e.target.value)}
-                placeholder="123 Main St, City, Country"
+                placeholder="123 Main St"
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "1px solid #ccc",
+                  marginTop: "6px"
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ fontWeight: "bold" }}>Address Line 2</label>
+              <input
+                type="text"
+                value={addressLine2}
+                onChange={e => setAddressLine2(e.target.value)}
+                placeholder="Apartment, suite, unit, building, floor, etc."
                 style={{
                   width: "100%",
                   padding: "10px",
@@ -538,6 +563,7 @@ export default function CheckoutPage() {
                 params.set('shippingAddress', JSON.stringify({
                   fullName,
                   addressLine1: address,
+                  addressLine2, // New line
                   city: '', // You might want to add a city field
                   state,
                   postalCode: zipCode,
