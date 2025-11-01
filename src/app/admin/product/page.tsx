@@ -28,7 +28,7 @@ const AdminProductsPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  
+
   // New state for reason modals
   const [showReasonModal, setShowReasonModal] = useState(false);
   const [actionType, setActionType] = useState<'flag' | 'remove'>('flag');
