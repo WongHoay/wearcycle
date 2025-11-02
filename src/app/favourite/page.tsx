@@ -4,17 +4,33 @@ import { useRouter } from "next/navigation";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
 import { getAuth } from "firebase/auth";
-import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { Heart, MapPin } from "lucide-react";
 
-// Type for favourite item
+// Type for favourite item - matching HomePage Product interface
 type FavouriteItem = {
     id: string;
-    name: string;
-    image: string;
-    description?: string;
-    price?: string;
-    seller?: string;
+    name?: string;
+    title?: string;
+    image?: string;
+    images?: string[];
+    price?: number;
+    originalPrice?: number;
+    category?: string;
+    brand?: string;
+    condition?: string;
+    seller?: string | {
+        username: string;
+        avatar?: string;
+    };
+    sellerProfilePicture?: string;
+    sellerId?: string;
+    location?: string;
+    size?: string;
+    sold?: boolean;
+    rating?: number;
+    createdAt?: any;
 };
 
 const FavouritePage: React.FC = () => {
@@ -27,22 +43,56 @@ const FavouritePage: React.FC = () => {
             setLoading(true);
             const auth = getAuth();
             const user = auth.currentUser;
+
             if (!user) {
                 setFavourites([]);
                 setLoading(false);
                 return;
             }
-            const itemsRef = collection(db, "favorites", user.uid, "items");
-            const snapshot = await getDocs(itemsRef);
-            const items: FavouriteItem[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FavouriteItem));
-            setFavourites(items);
+
+            try {
+                const itemsRef = collection(db, "favorites", user.uid, "items");
+                const snapshot = await getDocs(itemsRef);
+
+                const itemsWithNulls = await Promise.all(snapshot.docs.map(async docSnap => {
+                    const data = docSnap.data() as FavouriteItem;
+                    // Only include items that are not sold
+                    if (data.sold) return null;
+
+                    let sellerObj: { username: string; avatar?: string } | undefined = undefined;
+                    if (data.sellerId) {
+                        const sellerRef = doc(db, "users", data.sellerId);
+                        const sellerSnap = await getDoc(sellerRef);
+                        if (sellerSnap.exists()) {
+                            const sellerData = sellerSnap.data();
+                            sellerObj = {
+                                username: sellerData.username || "Unknown Seller",
+                                avatar: sellerData.profilePhotoUrl || "/api/placeholder/40/40"
+                            };
+                        }
+                    }
+
+                    return {
+                        ...data,
+                        id: docSnap.id,
+                        seller: sellerObj
+                    };
+                }));
+
+                const items = itemsWithNulls.filter((item): item is NonNullable<typeof item> => item !== null);
+                setFavourites(items);
+            } catch (error) {
+                console.error("Error fetching favourites:", error);
+                setFavourites([]);
+            }
             setLoading(false);
         };
+
         fetchFavourites();
     }, []);
 
     const handleItemClick = (itemId: string) => {
-        // Navigate to item detail page
+        console.log("Navigating to item:", itemId);
         router.push(`/view_item?id=${itemId}`);
     };
 
@@ -50,191 +100,307 @@ const FavouritePage: React.FC = () => {
         const auth = getAuth();
         const user = auth.currentUser;
         if (!user) return;
-        const itemRef = doc(db, "favorites", user.uid, "items", itemId);
-        await deleteDoc(itemRef);
-        setFavourites(prev => prev.filter(item => item.id !== itemId));
-    };
-
-    const styles = {
-        favouritePage: {
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column" as const,
-        },
-        main: {
-            flex: 1,
-            padding: "32px",
-            maxWidth: "1200px",
-            margin: "0 auto",
-            width: "100%",
-        },
-        title: {
-            fontSize: "2rem",
-            fontWeight: "bold",
-            marginBottom: "2rem",
-            color: "#222",
-        },
-        emptyState: {
-            textAlign: "center" as const,
-            padding: "64px 32px",
-            color: "#666",
-            fontSize: "1.1rem",
-        },
-        itemsList: {
-            listStyle: "none",
-            padding: 0,
-            margin: 0,
-        },
-        itemCard: {
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            marginBottom: "24px",
-            background: "#fafafa",
-            padding: "16px",
-            borderRadius: "12px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            transition: "transform 0.2s ease, box-shadow 0.2s ease",
-            cursor: "pointer",
-            position: "relative" as const,
-        },
-        itemCardHover: {
-            transform: "translateY(-2px)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-        },
-        itemImage: {
-            borderRadius: "8px",
-            objectFit: "cover" as const,
-            flexShrink: 0,
-        },
-        itemContent: {
-            flex: 1,
-            minWidth: 0,
-        },
-        itemName: {
-            margin: 0,
-            fontSize: "1.25rem",
-            fontWeight: "600",
-            color: "#222",
-            marginBottom: "8px",
-        },
-        itemDescription: {
-            margin: 0,
-            color: "#666",
-            fontSize: "0.9rem",
-            lineHeight: "1.4",
-        },
-        itemPrice: {
-            margin: "8px 0 0 0",
-            fontSize: "1.1rem",
-            fontWeight: "bold",
-            color: "#2c5aa0",
-        },
-        itemSeller: {
-            margin: "4px 0 0 0",
-            fontSize: "0.85rem",
-            color: "#888",
-        },
-        itemCount: {
-            fontSize: "1rem",
-            color: "#666",
-            marginBottom: "24px",
-        },
+        
+        try {
+            console.log("Removing favorite:", itemId);
+            const itemRef = doc(db, "favorites", user.uid, "items", itemId);
+            await deleteDoc(itemRef);
+            setFavourites(prev => prev.filter(item => item.id !== itemId));
+            console.log("Successfully removed favorite");
+        } catch (error) {
+            console.error("Error removing favourite:", error);
+        }
     };
 
     return (
-        <div style={styles.favouritePage}>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
             <Navbar />
-            <main style={styles.main}>
-                <h1 style={styles.title}>Your Favourite Items</h1>
+            <div style={{ flex: 1, padding: "2rem", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+                <h1 style={{ fontSize: "2.5rem", fontWeight: "bold", marginBottom: "1rem", color: "#333" }}>
+                    Your Favourite Items
+                </h1>
+                
                 {loading ? (
-                    <div style={styles.emptyState}>Loading...</div>
+                    <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        minHeight: '200px',
+                        fontSize: '1.2rem',
+                        color: '#666'
+                    }}>
+                        Loading your favourites...
+                    </div>
                 ) : favourites.length > 0 ? (
                     <>
-                        <p style={styles.itemCount}>
+                        <p style={{ fontSize: "1rem", color: "#666", marginBottom: "2rem" }}>
                             {favourites.length} item{favourites.length !== 1 ? 's' : ''} saved
                         </p>
-                        <ul style={styles.itemsList}>
+                        
+                        {/* Grid layout for favorites - matching HomePage style */}
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                            gap: "1.5rem"
+                        }}>
                             {favourites.map((item) => (
-                                <li
+                                <div
                                     key={item.id}
-                                    style={styles.itemCard}
-                                    onClick={() => handleItemClick(item.id)}
+                                    style={{
+                                        background: "#fff",
+                                        borderRadius: "15px",
+                                        boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
+                                        overflow: "hidden",
+                                        position: "relative",
+                                        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                                        cursor: "pointer"
+                                    }}
                                     onMouseEnter={(e) => {
-                                        Object.assign(e.currentTarget.style, styles.itemCardHover);
+                                        e.currentTarget.style.transform = 'translateY(-5px)';
+                                        e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
                                     }}
                                     onMouseLeave={(e) => {
-                                        e.currentTarget.style.transform = "translateY(0)";
-                                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+                                        e.currentTarget.style.transform = 'translateY(0)';
+                                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
                                     }}
+                                    onClick={() => handleItemClick(item.id)}
                                 >
-                                    <img
-                                        src={item.image || item.images?.[0] || "https://via.placeholder.com/120"}
-                                        alt={item.name}
-                                        width={120}
-                                        height={120}
-                                        style={styles.itemImage}
-                                    />
-                                    <div style={styles.itemContent}>
-                                        <h2 style={styles.itemName}>{item.name}</h2>
-                                        {item.description && (
-                                            <p style={styles.itemDescription}>
-                                                {item.description}
-                                            </p>
-                                        )}
-                                        {item.price && (
-                                            <p style={styles.itemPrice}>
-                                                {item.price}
-                                            </p>
-                                        )}
-                                        {item.seller && (
-                                            <p style={styles.itemSeller}>
-                                                Sold by {item.seller}
-                                            </p>
-                                        )}
-                                    </div>
-                                    {/* Heart icon for removing favourite */}
+                                    {/* Remove Favorite Button */}
                                     <button
-                                        onClick={e => {
+                                        onClick={(e) => {
                                             e.stopPropagation();
                                             handleRemoveFavourite(item.id);
                                         }}
                                         style={{
                                             position: "absolute",
-                                            top: "16px",
-                                            right: "16px",
-                                            background: "none",
+                                            top: "10px",
+                                            right: "10px",
+                                            background: "rgba(255, 255, 255, 0.9)",
                                             border: "none",
+                                            borderRadius: "50%",
+                                            width: "35px",
+                                            height: "35px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
                                             cursor: "pointer",
-                                            padding: 0
+                                            zIndex: 10
                                         }}
                                         title="Remove from Favourites"
                                     >
-                                        <svg
-                                            width="28"
-                                            height="28"
-                                            viewBox="0 0 24 24"
+                                        <Heart
+                                            size={18}
                                             fill="#ff4757"
-                                            stroke="#ff4757"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            style={{ display: "block" }}
-                                        >
-                                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                        </svg>
+                                            color="#ff4757"
+                                        />
                                     </button>
-                                </li>
+
+                                    {/* Item Image */}
+                                    <div style={{
+                                        width: '100%',
+                                        height: '220px',
+                                        background: '#f9f9f9',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        overflow: 'hidden'
+                                    }}>
+                                        <img
+                                            src={item.image || item.images?.[0] || "https://via.placeholder.com/220"}
+                                            alt={item.name || item.title || "Product"}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Item Details - matching HomePage layout */}
+                                    <div style={{ padding: "1.25rem" }}>
+                                        {/* Product Name */}
+                                        <h4 style={{
+                                            margin: 0,
+                                            fontSize: '1.1rem',
+                                            fontWeight: '600',
+                                            color: '#333',
+                                            lineHeight: '1.3',
+                                            marginBottom: '0.5rem'
+                                        }}>
+                                            {item.name || item.title}
+                                        </h4>
+
+                                        {/* Price */}
+                                        <div style={{
+                                            fontSize: '1.25rem',
+                                            fontWeight: '700',
+                                            color: '#c9a26d',
+                                            marginBottom: '0.75rem'
+                                        }}>
+                                            RM {item.price || 0}
+                                            {item.originalPrice && (
+                                                <span style={{
+                                                    fontSize: '0.875rem',
+                                                    color: '#999',
+                                                    textDecoration: 'line-through',
+                                                    marginLeft: '0.5rem',
+                                                    fontWeight: '400'
+                                                }}>
+                                                    RM {item.originalPrice}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Seller Info */}
+                                        {item.seller && typeof item.seller === "object" && (
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                marginBottom: '0.75rem'
+                                            }}>
+                                                <img
+                                                    src={item.seller.avatar || "/api/placeholder/40/40"}
+                                                    alt={item.seller.username}
+                                                    style={{
+                                                        width: '24px',
+                                                        height: '24px',
+                                                        borderRadius: '50%',
+                                                        objectFit: 'cover',
+                                                        border: '1px solid #ddd'
+                                                    }}
+                                                />
+                                                <span style={{
+                                                    fontSize: '0.875rem',
+                                                    color: '#666',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    {item.seller.username}
+                                                </span>
+                                                {item.rating && (
+                                                    <span style={{ fontSize: '0.75rem', color: '#666' }}>
+                                                        ★ {item.rating}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Category, Condition, Brand, and Size badges */}
+                                        <div style={{
+                                            display: 'flex',
+                                            gap: '0.5rem',
+                                            marginBottom: '0.75rem',
+                                            flexWrap: 'wrap'
+                                        }}>
+                                            {item.condition && (
+                                                <span style={{
+                                                    background: '#f9f7f1',
+                                                    color: '#c9a26d',
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '12px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    {item.condition}
+                                                </span>
+                                            )}
+                                            {item.size && (
+                                                <span style={{
+                                                    background: '#f9f9f9',
+                                                    color: '#666',
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '12px',
+                                                    fontSize: '0.75rem'
+                                                }}>
+                                                    Size {item.size}
+                                                </span>
+                                            )}
+                                            {item.category && (
+                                                <span style={{
+                                                    background: '#f0f8ff',
+                                                    color: '#4a90e2',
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '12px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    {item.category}
+                                                </span>
+                                            )}
+                                            {item.brand && (
+                                                <span style={{
+                                                    background: '#f9f9f9',
+                                                    color: '#666',
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '12px',
+                                                    fontSize: '0.75rem'
+                                                }}>
+                                                    {item.brand}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Location */}
+                                        {item.location && (
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.25rem',
+                                                color: '#888',
+                                                fontSize: '0.875rem'
+                                            }}>
+                                                <MapPin size={12} />
+                                                {item.location}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             ))}
-                        </ul>
+                        </div>
                     </>
                 ) : (
-                    <div style={styles.emptyState}>
-                        <p>No favourite items saved yet.</p>
-                        <p>Start browsing and save items you love!</p>
+                    <div style={{ 
+                        textAlign: 'center', 
+                        padding: '4rem 2rem', 
+                        color: '#666',
+                        fontSize: '1.2rem'
+                    }}>
+                        <div style={{ 
+                            fontSize: '3rem', 
+                            marginBottom: '1rem',
+                            opacity: 0.3
+                        }}>
+                            💕
+                        </div>
+                        <h2 style={{ 
+                            fontSize: '1.5rem', 
+                            fontWeight: '600', 
+                            marginBottom: '1rem',
+                            color: '#333'
+                        }}>
+                            No favourite items yet
+                        </h2>
+                        <p style={{ marginBottom: '2rem' }}>
+                            Start browsing and save items you love!
+                        </p>
+                        <button
+                            onClick={() => router.push('/search_result')}
+                            style={{
+                                background: '#c9a26d',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem 2rem',
+                                borderRadius: '25px',
+                                fontSize: '1rem',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Browse Products
+                        </button>
                     </div>
                 )}
-            </main>
+            </div>
             <Footer />
         </div>
     );

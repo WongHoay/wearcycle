@@ -9,16 +9,33 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (attempts >= 3) {
+      setError("You have reached the maximum number of login attempts. Please reset your password.");
+      return;
+    }
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await user.reload(); // Ensure latest info
+      if (!user.emailVerified) {
+        setError("Please verify your email before logging in. Check your inbox for the verification email.");
+        return;
+      }
+      setAttempts(0); // Reset on successful login
       router.push("/homepage"); 
     } catch (err: any) {
-      setError(err.message);
+      setAttempts(prev => prev + 1);
+      if (attempts + 1 >= 3) {
+        setError("You have reached the maximum number of login attempts. Please reset your password.");
+      } else {
+        setError("Login failed. Please check your credentials.");
+      }
     }
   };
 
@@ -73,16 +90,24 @@ export default function Login() {
               className="absolute right-3 top-9 text-gray-500 text-sm"
               tabIndex={-1}
             >
-              {showPassword ? "👁️" : "👁️‍🗨️"}
+              {showPassword ? "Hide" : "Show"}
             </button>
           </div>
           {error && <div className="text-red-600 text-sm">{error}</div>}
           <button
             type="submit"
             className="w-full bg-amber-900 hover:bg-black text-white font-semibold py-3 rounded transition"
+            disabled={attempts >= 3}
           >
             Login
           </button>
+          {attempts >= 3 && (
+            <div className="text-center mt-2">
+              <a href="/forgot-password" className="text-blue-600 hover:underline text-sm">
+                Reset your password
+              </a>
+            </div>
+          )}
           <div className="text-right">
             <a href="/forgot-password" className="text-blue-600 hover:underline text-sm">
               Forgot password?
@@ -91,7 +116,7 @@ export default function Login() {
         </form>
 
         <p className="text-center text-sm text-gray-600 mt-6">
-          Don't have an account? <a href="/register" className="text-blue-600 hover:underline">Register</a>
+          Don't have an account? <a href="/register" className="text-amber-800 hover:underline">Register</a>
         </p>
       </div>
     </div>

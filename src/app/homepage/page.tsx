@@ -1,12 +1,17 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, Heart, Star, MapPin } from 'lucide-react';
+import { Search, Filter, Heart, MapPin } from 'lucide-react';
 import Footer from '../../components/footer';
 import Navbar from '../../components/navbar';
 import { collection, getDocs, query, limit, orderBy, doc, getDoc, updateDoc, arrayUnion, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { useRouter } from "next/navigation";
 import { getAuth } from 'firebase/auth';
+
+interface Seller {
+  username: string;
+  avatar?: string;
+}
 
 interface Product {
   id: string;
@@ -20,10 +25,12 @@ interface Product {
   size: string;
   location: string;
   category?: string;
+  brand?: string;
   isFavorite?: boolean;
   createdAt?: any;
-  seller?: string;
+  seller?: string | Seller;
   rating?: number;
+  sold?: boolean;
 }
 
 interface BidItem {
@@ -56,101 +63,283 @@ const HomePage = () => {
   const [biddingItems, setBiddingItems] = useState<BidItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<Product[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [conditions, setConditions] = useState<string[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState('newest');
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchFeatured = async () => {
-      const q = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(6));
-      const snapshot = await getDocs(q);
-      setFeaturedItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
-    };
-    const fetchBidding = async () => {
-      const q = query(collection(db, "bids"), orderBy("createdAt", "desc"), limit(3));
-      const snapshot = await getDocs(q);
-      const now = new Date();
-      setBiddingItems(snapshot.docs.map(doc => {
+  // Fetch filter options from database
+  const fetchFilterOptions = async () => {
+    try {
+      // Fetch categories from the categories collection
+      const categoriesSnapshot = await getDocs(collection(db, "categories"));
+      const categoriesList: string[] = [];
+      categoriesSnapshot.docs.forEach(doc => {
         const data = doc.data();
-        // Parse endDate as Date
-        const isExpired = data.endDate && new Date(data.endDate) < now;
-        return { id: doc.id, ...data, isExpired } as BidItem & { isExpired: boolean };
-      }));
+        categoriesList.push(data.name || doc.id);
+      });
+      setCategories(categoriesList.sort());
+
+      // Fetch conditions from the conditions collection
+      const conditionsSnapshot = await getDocs(collection(db, "conditions"));
+      const conditionsList: string[] = [];
+      conditionsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        conditionsList.push(data.name || doc.id);
+      });
+      setConditions(conditionsList.sort());
+
+      // Fetch brands from the brands collection
+      const brandsSnapshot = await getDocs(collection(db, "brands"));
+      const brandsList: string[] = [];
+      brandsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        brandsList.push(data.name || doc.id);
+      });
+      setBrands(brandsList.sort());
+    } catch (error) {
+      console.error("Error fetching filter options:", error);
+      // Fallback to default values
+      setCategories(['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Bags', 'Accessories']);
+      setConditions(['Brand New', 'Like New', 'Lightly Used', 'Well Used', 'Heavily Used']);
+      setBrands(['Zara', 'H&M', 'Nike', 'Adidas', 'Coach', "Levi's", 'Uniqlo', 'Other']);
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      
+      // Fetch filter options first
+      await fetchFilterOptions();
+      
+      // Fetch featured items
+      const fetchFeatured = async () => {
+        try {
+          const q = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(6));
+          const snapshot = await getDocs(q);
+
+          // Fetch seller info for each product
+          const items: Product[] = await Promise.all(snapshot.docs
+            .map(async docSnap => {
+              const data = docSnap.data();
+              let sellerObj: Seller | undefined = undefined;
+              if (data.sellerId) {
+                const sellerRef = doc(db, "users", data.sellerId);
+                const sellerSnap = await getDoc(sellerRef);
+                if (sellerSnap.exists()) {
+                  const sellerData = sellerSnap.data();
+                  sellerObj = {
+                    username: sellerData.username || "Unknown Seller",
+                    avatar: sellerData.profilePhotoUrl || "/api/placeholder/40/40"
+                  };
+                }
+              }
+              return {
+                id: docSnap.id,
+                ...data,
+                seller: sellerObj
+              } as Product;
+            })
+          );
+
+          setFeaturedItems(items.filter(item => !item.sold));
+        } catch (error) {
+          console.error("Error fetching featured items:", error);
+        }
+      };
+      
+      // Fetch bidding items
+      const fetchBidding = async () => {
+        try {
+          const q = query(collection(db, "bids"), orderBy("createdAt", "desc"), limit(3));
+          const snapshot = await getDocs(q);
+          const now = new Date();
+          // Only show bids that have not ended
+          setBiddingItems(snapshot.docs
+            .map(doc => {
+              const data = doc.data();
+              const isExpired = data.endDate && new Date(data.endDate) < now;
+              return { id: doc.id, ...data, isExpired } as BidItem & { isExpired: boolean };
+            })
+            .filter(bid => !bid.isExpired)
+          );
+        } catch (error) {
+          console.error("Error fetching bidding items:", error);
+        }
+      };
+      
+      // Fetch favorites
+      const fetchFavorites = async () => {
+        try {
+          const auth = getAuth();
+          const user = auth.currentUser;
+          if (!user) return;
+          const itemsRef = collection(db, "favorites", user.uid, "items");
+          const snapshot = await getDocs(itemsRef);
+          setFavoriteIds(snapshot.docs.map(doc => doc.id));
+        } catch (error) {
+          console.error("Error fetching favorites:", error);
+        }
+      };
+      
+      await Promise.all([fetchFeatured(), fetchBidding(), fetchFavorites()]);
+      setLoading(false);
     };
-    const fetchFavorites = async () => {
-      const auth = getAuth();
-      const user = auth.currentUser;
-      if (!user) return;
-      // Fetch from subcollection "items"
-      const itemsRef = collection(db, "favorites", user.uid, "items");
-      const snapshot = await getDocs(itemsRef);
-      setFavoriteIds(snapshot.docs.map(doc => doc.id));
-    };
-    fetchFeatured();
-    fetchBidding();
-    fetchFavorites();
+
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    let items = [...featuredItems];
-    if (appliedFilters.category) {
-      items = items.filter(item => item.category?.toLowerCase() === appliedFilters.category.toLowerCase());
-    }
-    if (appliedFilters.condition) {
-      items = items.filter(item =>
-        item.condition &&
-        item.condition.trim().toLowerCase() === appliedFilters.condition.trim().toLowerCase()
+  // Helper: filter and search products
+  const filterAndSearchProducts = (items: Product[], search: string, filters: typeof appliedFilters) => {
+    let result = [...items];
+
+    // Filter by category
+    if (filters.category) {
+      result = result.filter(item =>
+        item.category?.toLowerCase() === filters.category.toLowerCase()
       );
     }
-    if (appliedFilters.brand) {
-      if (appliedFilters.brand === "Other") {
-        items = items.filter(item => {
-          const allBrands = brands.map(b => b.toLowerCase()).filter(b => b !== "other");
-          const name = item.name?.toLowerCase() || "";
-          const title = item.title?.toLowerCase() || "";
-          return !allBrands.some(brand =>
-            name.includes(brand) || title.includes(brand)
-          );
+    // Filter by condition
+    if (filters.condition) {
+      result = result.filter(item =>
+        item.condition?.toLowerCase() === filters.condition.toLowerCase()
+      );
+    }
+    // Filter by brand
+    if (filters.brand) {
+      if (filters.brand === "Other") {
+        const allBrands = brands.map(b => b.toLowerCase()).filter(b => b !== "other");
+        result = result.filter(item => {
+          const name = (item.name || item.title || '').toLowerCase();
+          const brand = (item.brand || '').toLowerCase();
+          return !allBrands.some(b => name.includes(b) || brand.includes(b));
         });
       } else {
-        items = items.filter(item =>
-          item.name?.toLowerCase().includes(appliedFilters.brand.toLowerCase()) ||
-          item.title?.toLowerCase().includes(appliedFilters.brand.toLowerCase())
-        );
+        result = result.filter(item => {
+          const name = (item.name || item.title || '').toLowerCase();
+          const brand = (item.brand || '').toLowerCase();
+          return name.includes(filters.brand.toLowerCase()) || brand.includes(filters.brand.toLowerCase());
+        });
       }
     }
-    setFilteredItems(items);
-  }, [featuredItems, appliedFilters]);
+    // Search by name/title/brand/category
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      result = result.filter(item => {
+        const name = (item.name || item.title || '').toLowerCase();
+        const brand = (item.brand || '').toLowerCase();
+        const category = (item.category || '').toLowerCase();
+        return name.includes(term) || brand.includes(term) || category.includes(term);
+      });
+    }
+    // Sort
+    switch (sortBy) {
+      case 'newest':
+        result.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+          const timeB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+          return timeB.getTime() - timeA.getTime();
+        });
+        break;
+      case 'lowest-price':
+        result.sort((a, b) => a.price - b.price);
+        break;
+      case 'highest-price':
+        result.sort((a, b) => b.price - a.price);
+        break;
+      default:
+        break;
+    }
+    return result;
+  };
 
-  const categories = ['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Bags', 'Accessories'];
-  const conditions = ['Brand New','Like New', 'Lightly Used', 'Well Used', 'Heavily Used'];
-  const brands = ['Zara', 'H&M', 'Nike', 'Adidas', 'Coach', "Levi's", 'Uniqlo', 'Other'];
+  // Apply filters and search when featuredItems, appliedFilters, searchQuery, brands, or sortBy changes
+  useEffect(() => {
+    setFilteredItems(filterAndSearchProducts(featuredItems, searchQuery, appliedFilters));
+  }, [featuredItems, appliedFilters, searchQuery, brands, sortBy]);
 
+  // Filter panel handlers
   const handleFilterChange = (filterType: keyof typeof selectedFilters, value: string) => {
     setSelectedFilters(prev => ({
       ...prev,
-      [filterType]: prev[filterType] === value ? '' : value
+      [filterType]: value
     }));
   };
 
-  const handleSearchSubmit = () => {
-    router.push(`/search_result?query=${encodeURIComponent(searchQuery)}`);
+  const applyFilters = () => {
+    setAppliedFilters({ ...selectedFilters });
+    setShowFilters(false);
+    setFilteredItems(filterAndSearchProducts(featuredItems, searchQuery, { ...selectedFilters }));
+  };
+
+  const clearFilters = () => {
+    setSelectedFilters({ category: '', condition: '', brand: '' });
+    setAppliedFilters({ category: '', condition: '', brand: '' });
+    setFilteredItems(filterAndSearchProducts(featuredItems, searchQuery, { category: '', condition: '', brand: '' }));
+  };
+
+  const clearAll = () => {
+    setSearchQuery('');
+    clearFilters();
+  };
+
+  const removeFilter = (filterType: keyof typeof appliedFilters) => {
+    const newFilters = { ...appliedFilters, [filterType]: '' };
+    setAppliedFilters(newFilters);
+    setSelectedFilters(prev => ({ ...prev, [filterType]: '' }));
+    setFilteredItems(filterAndSearchProducts(featuredItems, searchQuery, newFilters));
+  };
+
+  const hasActiveFilters = () => Object.values(appliedFilters).some(filter => filter !== '');
+  const isSearchActive = () => searchQuery.trim() !== '';
+
+  // Search bar submit
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    // Redirect to search result page with query as URL param
+    if (searchQuery.trim()) {
+      router.push(`/search_result?query=${encodeURIComponent(searchQuery.trim())}`);
+    }
   };
 
   const handleSaveFavourite = async (item: Product) => {
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user) return;
-    const itemRef = doc(db, "favorites", user.uid, "items", item.id);
+    
+    try {
+      const itemRef = doc(db, "favorites", user.uid, "items", item.id);
 
-    if (favoriteIds.includes(item.id)) {
-      // Remove from favourites
-      await deleteDoc(itemRef);
-      setFavoriteIds(prev => prev.filter(id => id !== item.id));
-    } else {
-      // Add to favourites
-      await setDoc(itemRef, item);
-      setFavoriteIds(prev => [...prev, item.id]);
+      if (favoriteIds.includes(item.id)) {
+        // Remove from favourites
+        await deleteDoc(itemRef);
+        setFavoriteIds(prev => prev.filter(id => id !== item.id));
+      } else {
+        // Add to favourites
+        await setDoc(itemRef, item);
+        setFavoriteIds(prev => [...prev, item.id]);
+      }
+    } catch (error) {
+      console.error("Error updating favorites:", error);
     }
   };
+
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #c9a26d 0%, #8b7355 100%)'
+      }}>
+        <div style={{ color: 'white', fontSize: '1.2rem' }}>Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -184,7 +373,7 @@ const HomePage = () => {
             </h2>
             <p style={{
               fontSize: '1.2rem',
-              marginBottom: '3rem',
+              marginBottom: '2rem',
               opacity: 0.9,
               textShadow: '0 2px 4px rgba(0,0,0,0.3)'
             }}>
@@ -192,206 +381,220 @@ const HomePage = () => {
             </p>
             {/* Search Bar */}
             <div style={{
-              background: 'white',
-              borderRadius: '50px',
-              padding: '1rem',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
               display: 'flex',
               alignItems: 'center',
-              marginBottom: '2rem',
-              maxWidth: '600px',
-              margin: '0 auto 2rem',
-              position: 'relative',
-              zIndex: 1
+              maxWidth: '700px',
+              margin: '0 auto',
+              background: '#fff',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              marginBottom: '0.5rem',
+              position: 'relative'
             }}>
-              <Search size={24} style={{ color: '#666', marginLeft: '1rem', pointerEvents: 'none' }} />
-              <input
-                type="text"
-                placeholder="Search for clothes, brands, or styles..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  flex: 1,
-                  border: 'none',
-                  outline: 'none',
-                  fontSize: '1rem',
-                  padding: '0.5rem 1rem',
-                  background: 'transparent',
-                  color: '#333',
-                  width: '100%'
-                }}
-              />
-              <div
-                style={{ position: 'relative', marginRight: '0.5rem' }}
-                onMouseEnter={() => setShowFilters(true)}
-                onMouseLeave={() => setShowFilters(false)}
-              >
-                <button
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 1rem',
+                flex: 1
+              }}>
+                <Search size={20} style={{ color: '#666', marginRight: '0.5rem' }} />
+                <input
+                  type="text"
+                  placeholder="Search auctions by item name..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
                   style={{
-                    background: showFilters ? '#8b7355' : '#f0f0f0',
-                    color: showFilters ? 'white' : '#666',
                     border: 'none',
-                    padding: '0.5rem',
-                    borderRadius: '50%',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    outline: 'none',
+                    fontSize: '1rem',
+                    background: 'transparent',
+                    color: '#333',
+                    width: '100%',
+                    padding: '1rem 0'
                   }}
-                  tabIndex={-1}
-                  type="button"
-                >
-                  <Filter size={18} />
-                </button>
-                {/* Filters Panel (hover dropdown) */}
-                {showFilters && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '110%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(255, 255, 255, 0.95)',
-                      backdropFilter: 'blur(10px)',
-                      borderRadius: '20px',
-                      padding: '2rem',
-                      boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-                      maxWidth: '600px',
-                      minWidth: '400px',
-                      zIndex: 100
-                    }}
-                    onMouseEnter={() => setShowFilters(true)}
-                    onMouseLeave={() => setShowFilters(false)}
-                  >
-                    <h3 style={{ marginBottom: '1.5rem', color: '#333' }}>Filters</h3>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                      gap: '1.5rem'
-                    }}>
-                      {/* Category Filter */}
-                      <div>
-                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                          Category
-                        </label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {categories.map(category => (
-                            <button
-                              key={category}
-                              onClick={() => handleFilterChange('category', category)}
-                              style={{
-                                padding: '0.4rem 0.8rem',
-                                border: `1px solid ${selectedFilters.category === category ? '#c9a26d' : '#ddd'}`,
-                                background: selectedFilters.category === category ? '#c9a26d' : 'white',
-                                color: selectedFilters.category === category ? 'white' : '#333',
-                                borderRadius: '20px',
-                                fontSize: '0.875rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
-                              }}
-                            >
-                              {category}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Condition Filter */}
-                      <div>
-                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                          Condition
-                        </label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {conditions.map(condition => (
-                            <button
-                              key={condition}
-                              onClick={() => handleFilterChange('condition', condition)}
-                              style={{
-                                padding: '0.4rem 0.8rem',
-                                border: `1px solid ${selectedFilters.condition === condition ? '#c9a26d' : '#ddd'}`,
-                                background: selectedFilters.condition === condition ? '#c9a26d' : 'white',
-                                color: selectedFilters.condition === condition ? 'white' : '#333',
-                                borderRadius: '20px',
-                                fontSize: '0.875rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
-                              }}
-                            >
-                              {condition}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Brand Filter */}
-                      <div>
-                        <label style={{ fontWeight: '600', color: '#333', marginBottom: '0.5rem', display: 'block' }}>
-                          Brand
-                        </label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {brands.map(brand => (
-                            <button
-                              key={brand}
-                              onClick={() => handleFilterChange('brand', brand)}
-                              style={{
-                                padding: '0.4rem 0.8rem',
-                                border: `1px solid ${selectedFilters.brand === brand ? '#c9a26d' : '#ddd'}`,
-                                background: selectedFilters.brand === brand ? '#c9a26d' : 'white',
-                                color: selectedFilters.brand === brand ? 'white' : '#333',
-                                borderRadius: '20px',
-                                fontSize: '0.875rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
-                              }}
-                            >
-                              {brand}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-                      <button
-                        onClick={() => setSelectedFilters({
-                          category: '', condition: '', brand: ''
-                        })}
-                        style={{
-                          background: 'transparent',
-                          color: '#666',
-                          border: '1px solid #ddd',
-                          padding: '0.5rem 1rem',
-                          borderRadius: '8px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Clear All
-                      </button>
-                      <button style={{
-                        background: '#c9a26d',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '8px',
-                        cursor: 'pointer'
-                      }} onClick={() => setAppliedFilters(selectedFilters)}>
-                        Apply Filters
-                      </button>
-                    </div>
-                  </div>
-                )}
+                />
               </div>
-              <button style={{
-                background: '#c9a26d',
-                color: 'white',
-                border: 'none',
-                padding: '0.75rem 2rem',
-                borderRadius: '25px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }} onClick={handleSearchSubmit}>
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                style={{
+                  background: '#fff',
+                  border: 'none',
+                  borderLeft: '1px solid #eee',
+                  padding: '1rem 2rem',
+                  cursor: 'pointer',
+                  color: '#333',
+                  fontWeight: '500',
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <Filter size={20} />
+                Filter
+              </button>
+              <button
+                type="button"
+                onClick={handleSearchSubmit}
+                style={{
+                  background: '#333',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '1rem 2rem',
+                  fontWeight: '600',
+                  fontSize: '1rem',
+                  borderRadius: '0 12px 12px 0',
+                  cursor: 'pointer'
+                }}
+              >
                 Search
               </button>
+              {searchQuery.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: showFilters ? '8rem' : '15.5rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#666',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                    fontSize: '1.3rem'
+                  }}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
         </section>
+
+        {showFilters && (
+          <div style={{
+            marginTop: '0.5rem',
+            background: '#fff',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            textAlign: 'left',
+            maxWidth: '700px',
+            margin: '0 auto'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1rem',
+              marginBottom: '1rem'
+            }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                  Category
+                </label>
+                <select
+                  value={selectedFilters.category}
+                  onChange={e => handleFilterChange('category', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid #ddd',
+                    color: '#000'
+                  }}
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                  Condition
+                </label>
+                <select
+                  value={selectedFilters.condition}
+                  onChange={e => handleFilterChange('condition', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid #ddd',
+                    color: '#000'
+                  }}
+                >
+                  <option value="">All Conditions</option>
+                  {conditions.map(condition => (
+                    <option key={condition} value={condition}>{condition}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                  Brand
+                </label>
+                <select
+                  value={selectedFilters.brand}
+                  onChange={e => handleFilterChange('brand', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid #ddd',
+                    color: '#000'
+                  }}
+                >
+                  <option value="">All Brands</option>
+                  {brands.map(brand => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                  {!brands.includes('Other') && (
+                    <option value="Other">Other</option>
+                  )}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={applyFilters}
+                style={{
+                  background: '#c9a26d',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Apply Filters
+              </button>
+              <button
+                onClick={clearFilters}
+                style={{
+                  background: '#fff',
+                  color: '#666',
+                  border: '1px solid #ddd',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Featured Items */}
         <section style={{
@@ -504,20 +707,26 @@ const HomePage = () => {
                       alignItems: 'flex-start',
                       marginBottom: '0.5rem'
                     }}>
-                      <h4 style={{
-                        margin: 0,
-                        fontSize: '1.1rem',
-                        fontWeight: '600',
-                        color: '#333',
-                        lineHeight: '1.3'
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        marginBottom: '0.5rem'
                       }}>
-                        {item.name || item.title}
-                      </h4>
-                      <div style={{ textAlign: 'right' }}>
+                        <h4 style={{
+                          margin: 0,
+                          fontSize: '1.1rem',
+                          fontWeight: '600',
+                          color: '#333',
+                          lineHeight: '1.3'
+                        }}>
+                          {item.name || item.title}
+                        </h4>
                         <div style={{
                           fontSize: '1.25rem',
                           fontWeight: '700',
-                          color: '#c9a26d'
+                          color: '#c9a26d',
+                          marginTop: '0.5rem'
                         }}>
                           RM {item.price}
                         </div>
@@ -530,6 +739,33 @@ const HomePage = () => {
                             RM {item.originalPrice}
                           </div>
                         )}
+                        {/* Seller Info */}
+                        {item.seller && typeof item.seller === 'object' && (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            marginTop: '0.5rem'
+                          }}>
+                            <img
+                              src={item.seller.avatar || '/api/placeholder/40/40'}
+                              alt={item.seller.username}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                            <span style={{
+                              fontSize: '0.95rem',
+                              color: '#333',
+                              fontWeight: '500'
+                            }}>
+                              {item.seller.username}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -539,10 +775,6 @@ const HomePage = () => {
                       gap: '0.5rem',
                       marginBottom: '0.75rem'
                     }}>
-                      <Star size={14} fill="#ffd700" color="#ffd700" />
-                      <span style={{ fontSize: '0.875rem', color: '#666' }}>
-                        {item.rating ? `${item.rating} • ` : ''}{item.seller}
-                      </span>
                     </div>
 
                     <div style={{
@@ -596,11 +828,28 @@ const HomePage = () => {
             <p style={{ fontSize: "1.1rem", marginBottom: "2rem" }}>
               Place bids on selected items and compete for the best deals! Our bidding system is transparent and easy to use.
             </p>
+            <button
+              style={{
+                background: "#c9a26d",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                padding: "0.75rem 2rem",
+                fontWeight: "bold",
+                fontSize: "1rem",
+                cursor: "pointer",
+                marginBottom: "2rem"
+              }}
+              onClick={() => router.push("/bidding_page")}
+            >
+              View All Bidding Items
+            </button>
             <div style={{
-              display: "flex",
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
               gap: "2rem",
               justifyContent: "center",
-              flexWrap: "wrap"
+              marginBottom: "2rem"
             }}>
               {biddingItems.length === 0 ? (
                 <div style={{
@@ -625,7 +874,7 @@ const HomePage = () => {
                     borderRadius: "12px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
                     padding: "1.5rem",
-                    minWidth: "300px",
+                    minWidth: "0",
                     textAlign: "left"
                   }}>
                     <strong>{bid.productName || bid.name || "Bid Item"}</strong>
@@ -667,4 +916,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-

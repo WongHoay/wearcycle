@@ -230,6 +230,49 @@ export default function PaymentPage() {
       await setDoc(orderRef, orderData);
       console.log("✅ Order created:", orderRef.id);
 
+      // Fetch seller info for each item
+      const sellers: { email: string; name: string }[] = [];
+      for (const itemId of items) {
+        const productRef = doc(db, "products", itemId);
+        const productSnap = await getDoc(productRef);
+        if (productSnap.exists()) {
+          const productData = productSnap.data();
+          if (productData.sellerId) {
+            const sellerRef = doc(db, "users", productData.sellerId);
+            const sellerSnap = await getDoc(sellerRef);
+            if (sellerSnap.exists()) {
+              const sellerData = sellerSnap.data();
+              sellers.push({
+                email: sellerData.email,
+                name: sellerData.username || sellerData.displayName || "Seller"
+              });
+            }
+          }
+        }
+      }
+
+      // Send email to each seller
+      for (const seller of sellers) {
+        await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "new_order",
+            data: {
+              sellerEmail: seller.email,
+              sellerName: seller.name,
+              orderId: orderRef.id,
+              buyerName: buyerInfo.name,
+              buyerEmail: buyerInfo.email,
+              shippingAddress,
+              items: items.map(itemId => ({ itemName: itemId })), // You can expand with more item info if needed
+              totalAmount: amount,
+              orderDate: new Date().toLocaleString()
+            }
+          })
+        });
+      }
+
       // ✅ Mark all products as sold
       if (items && items.length > 0) {
         console.log("Marking products as sold:", items);

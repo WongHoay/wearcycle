@@ -183,7 +183,7 @@ function BidForm() {
                     price: Number(form.price),
                     minIncrement: Number(form.minIncrement), // Save as number
                     images: imageUrls,
-                    userId: user.uid,
+                    sellerId: user.uid,
                     createdAt: new Date(),
                 };
 

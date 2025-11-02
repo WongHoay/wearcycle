@@ -23,7 +23,6 @@ interface ItemDetail {
         username: string;
         avatar: string;
     };
-    specifications?: Record<string, any>;
 }
 
 interface BidDetail extends ItemDetail {
@@ -35,7 +34,7 @@ interface BidDetail extends ItemDetail {
         amount: number;
         timestamp: string;
     }>;
-    specifications?: Record<string, any>;
+    productName?: string;
 }
 
 export default function ViewItemPage() {
@@ -86,8 +85,8 @@ export default function ViewItemPage() {
                     category: data.category || "",
                     condition: data.condition || "",
                     seller,
-                    brand: data.brand || "",  
-                    size: data.size || ""      
+                    brand: data.brand || "",
+                    size: data.size || ""
                 });
             } else {
                 // Try bids collection
@@ -116,19 +115,20 @@ export default function ViewItemPage() {
 
                     setItem({
                         id: itemId,
-                        name: data.name || data.title || "Unnamed Bid Item",
+                        name: data.productName || data.title || "Unnamed Bid Item",
                         price: data.price || 0,
                         description: data.description || "",
                         images: data.images || [data.image] || [],
                         category: data.category || "",
                         condition: data.condition || "",
                         seller,
-                        specifications: data.specifications || {},
+                        brand: data.brand || "",
+                        size: data.size || "",
                         currentBid: Number(data.currentBid) || 0,
                         minIncrement: Number(data.minIncrement) || 1,
                         endDate: data.endDate || "",
-                        bids: data.bids || []
-                         
+                        bids: data.bids || [],
+                        productName: data.productName || ""
                     });
 
                     setBidAmount((Number(data.currentBid) || 0) + (Number(data.minIncrement) || 1));
@@ -212,6 +212,13 @@ export default function ViewItemPage() {
 
         try {
             const bidRef = doc(db, "bids", bidItem.id);
+
+            // Find previous highest bidder before updating
+            let previousHighestBid = null;
+            if (bidItem.bids && bidItem.bids.length > 0) {
+                previousHighestBid = bidItem.bids.reduce((max, bid) => bid.amount > max.amount ? bid : max, bidItem.bids[0]);
+            }
+
             await updateDoc(bidRef, {
                 bids: arrayUnion({
                     userId: user.uid,
@@ -220,9 +227,72 @@ export default function ViewItemPage() {
                 }),
                 currentBid: bidAmount
             });
+
             setBidError("");
             alert("Bid placed successfully!");
             setPlacingBid(false);
+
+            // Fetch emails for notifications
+            const bidderEmail = user.email;
+            const bidderName = user.displayName || user.email;
+            const itemTitle = bidItem.name || bidItem.productName;
+            const itemId = bidItem.id;
+
+            // Fetch previous highest bidder's email if outbid
+            let outbidEmail = null;
+            if (previousHighestBid && previousHighestBid.userId !== user.uid) {
+                const prevBidderRef = doc(db, "users", previousHighestBid.userId);
+                const prevBidderSnap = await getDoc(prevBidderRef);
+                if (prevBidderSnap.exists()) {
+                    outbidEmail = prevBidderSnap.data().email;
+                }
+            }
+
+            // Fetch seller email if you want to notify seller of new bid
+            let sellerEmail = null;
+            if (bidItem.seller && bidItem.seller.username !== "Unknown Seller") {
+                const bidRef = doc(db, "bids", itemId);
+                const bidSnap = await getDoc(bidRef);
+                if (bidSnap.exists()) {
+                    const bidData = bidSnap.data();
+                    if (bidData.sellerId) {
+                        const sellerRef = doc(db, "users", bidData.sellerId);
+                        const sellerSnap = await getDoc(sellerRef);
+                        if (sellerSnap.exists()) {
+                            sellerEmail = sellerSnap.data().email;
+                        }
+                    }
+                }
+            }
+
+            // Send emails via your API
+            await fetch("/api/send-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: "new_bid",
+                    data: {
+                        bidderEmail,
+                        bidderName,
+                        bidAmount,
+                        itemTitle,
+                        itemId,
+                        sellerEmail,
+                        outbidEmail: outbidEmail
+                            ? {
+                                bidderEmail: outbidEmail,
+                                currentBid: bidAmount,
+                                itemTitle,
+                                itemId,
+                                minIncrement: bidItem.minIncrement,
+                                previousBidderId: previousHighestBid?.userId,
+                                bidderId: user.uid
+                            }
+                            : null
+                    }
+                })
+            });
+
             // Optionally, refresh bid info
             // You may want to refetch the bid item here
         } catch (err) {
@@ -377,11 +447,10 @@ export default function ViewItemPage() {
                                 </button>
                             </div>
 
-                            {/* Specifications */}
+                            {/* Product Details */}
                             <div style={{ borderTop: "1px solid #eee", paddingTop: "18px" }}>
-                                <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Specifications</h3>
+                                <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Details</h3>
                                 <div>
-                                    {/* Brand, Size, Category from product fields */}
                                     <div style={{ display: "flex", marginBottom: "6px" }}>
                                         <span style={{ width: "120px", color: "#666" }}>Brand:</span>
                                         <span>{item.brand || "N/A"}</span>
@@ -394,14 +463,6 @@ export default function ViewItemPage() {
                                         <span style={{ width: "120px", color: "#666" }}>Category:</span>
                                         <span>{item.category || "N/A"}</span>
                                     </div>
-                                    {/* Other specifications */}
-                                    {item.specifications && Object.entries(item.specifications)
-                                        .map(([key, value]) => (
-                                            <div key={key} style={{ display: "flex", marginBottom: "6px" }}>
-                                                <span style={{ width: "120px", color: "#666" }}>{key}:</span>
-                                                <span>{value}</span>
-                                            </div>
-                                        ))}
                                 </div>
                             </div>
                         </div>
@@ -513,7 +574,7 @@ export default function ViewItemPage() {
                             }}>
                                 <Image
                                     src={bidItem.images[selectedImageIndex]}
-                                    alt={bidItem.name}
+                                    alt={bidItem.name || bidItem.productName || "Bid Item"}
                                     width={400}
                                     height={400}
                                     style={{
@@ -542,7 +603,7 @@ export default function ViewItemPage() {
                                     >
                                         <Image
                                             src={image}
-                                            alt={`${bidItem.name} ${index + 1}`}
+                                            alt={`${bidItem.name || bidItem.productName || "Bid Item"} ${index + 1}`}
                                             width={70}
                                             height={70}
                                             style={{
@@ -559,9 +620,13 @@ export default function ViewItemPage() {
 
                         {/* Bid Item Details */}
                         <div>
-                            <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "8px" }}>{bidItem.name}</h1>
+                            <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "8px" }}>
+                                {bidItem.name || bidItem.productName || "Unnamed Bid Item"}
+                            </h1>
                             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
-                                <span style={{ fontSize: "2rem", fontWeight: "bold", color: "#d32f2f" }}>Current Bid: RM {bidItem.currentBid}</span>
+                                <span style={{ fontSize: "2rem", fontWeight: "bold", color: "black" }}>
+                                    Item Price: RM {bidItem.price}
+                                </span>
                                 <span style={{
                                     background: "#e0f2f1",
                                     color: "#388e3c",
@@ -574,12 +639,25 @@ export default function ViewItemPage() {
                                 </span>
                             </div>
                             <div style={{ marginBottom: "12px", color: "#666" }}>
+                                Time Remaining: {
+                                    (() => {
+                                        const end = new Date(bidItem.endDate);
+                                        const now = new Date();
+                                        const diff = end.getTime() - now.getTime();
+                                        if (diff <= 0) return "Ended";
+                                        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                                        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+                                        return `${days}d ${hours}h ${minutes}m`;
+                                    })()
+                                }
+                            </div>
+                            <div style={{ marginBottom: "12px", color: "#666" }}>
                                 Minimum Increment: RM {bidItem.minIncrement}
                             </div>
                             <div style={{ marginBottom: "12px", color: "#666" }}>
                                 End Date: {bidItem.endDate}
                             </div>
-                            {/* Latest Bidding Price */}
                             {bidItem.price !== undefined && hasBids && highestBid && (
                                 <div style={{ marginBottom: "12px", color: "#1976d2", fontWeight: "bold" }}>
                                     Latest Bidding Price: RM {(bidItem.price + highestBid.amount).toFixed(2)}
@@ -605,14 +683,45 @@ export default function ViewItemPage() {
                                     height={40}
                                     style={{ borderRadius: "50%" }}
                                 />
+                                <span style={{ fontWeight: "500" }}>{bidItem.seller.username}</span>
                             </div>
 
                             {/* Place Bid Form */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px" }}>
+                                <div style={{
+                                    background: "#e3f2fd",
+                                    border: "1px solid #90caf9",
+                                    borderRadius: "8px",
+                                    padding: "12px",
+                                    marginBottom: "16px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px"
+                                }}>
+                                    <span style={{
+                                        display: "inline-block",
+                                        width: "24px",
+                                        height: "24px",
+                                        background: "#1976d2",
+                                        color: "#fff",
+                                        borderRadius: "50%",
+                                        textAlign: "center",
+                                        lineHeight: "24px",
+                                        fontWeight: "bold",
+                                        fontSize: "1.1rem"
+                                    }}>✉️</span>
+                                    <div>
+                                        <strong>Email Notifications Enabled</strong>
+                                        <div style={{ fontSize: "0.97rem", color: "#1976d2" }}>
+                                            You’ll receive email updates if someone outbids you or when the auction ends.
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <label style={{ fontWeight: "bold" }}>Your Bid (RM):</label>
                                 <input
                                     type="number"
-                                    min={bidItem.currentBid + bidItem.minIncrement}
+                                    min={bidItem.minIncrement}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(Number(e.target.value))}
                                     style={{
@@ -643,32 +752,22 @@ export default function ViewItemPage() {
                                 {bidError && <span style={{ color: "red", fontWeight: "bold" }}>{bidError}</span>}
                             </div>
 
-                            {/* Specifications */}
+                            {/* Show brand, size, category directly */}
                             <div style={{ borderTop: "1px solid #eee", paddingTop: "18px" }}>
-                                <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Specifications</h3>
+                                <h3 style={{ fontWeight: "600", marginBottom: "12px" }}>Details</h3>
                                 <div>
-                                    {/* Brand, Size, Category */}
                                     <div style={{ display: "flex", marginBottom: "6px" }}>
                                         <span style={{ width: "120px", color: "#666" }}>Brand:</span>
-                                        <span>{bidItem.specifications?.brand || "N/A"}</span>
+                                        <span>{bidItem.brand || "N/A"}</span>
                                     </div>
                                     <div style={{ display: "flex", marginBottom: "6px" }}>
                                         <span style={{ width: "120px", color: "#666" }}>Size:</span>
-                                        <span>{bidItem.specifications?.size || "N/A"}</span>
+                                        <span>{bidItem.size || "N/A"}</span>
                                     </div>
                                     <div style={{ display: "flex", marginBottom: "6px" }}>
                                         <span style={{ width: "120px", color: "#666" }}>Category:</span>
                                         <span>{bidItem.category || "N/A"}</span>
                                     </div>
-                                    {/* Other specifications */}
-                                    {Object.entries(bidItem.specifications || {})
-                                        .filter(([key]) => !["brand", "size"].includes(key.toLowerCase()))
-                                        .map(([key, value]) => (
-                                            <div key={key} style={{ display: "flex", marginBottom: "6px" }}>
-                                                <span style={{ width: "120px", color: "#666" }}>{key}:</span>
-                                                <span>{value}</span>
-                                            </div>
-                                        ))}
                                 </div>
                             </div>
                         </div>
