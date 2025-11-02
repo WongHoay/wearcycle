@@ -30,7 +30,7 @@ const Navbar: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {

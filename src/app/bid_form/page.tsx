@@ -101,6 +101,7 @@ function BidForm() {
         updatePreviews(newImages);
     };
 
+    //drag image
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -111,6 +112,7 @@ function BidForm() {
         }
     };
 
+    //image drop
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();

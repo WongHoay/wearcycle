@@ -1,12 +1,12 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { User, ListingItem } from '../../types/user'; // <-- fix import path
-import EditProfileView from '../../components/edit_profile_user'; // <-- fix import path
+import { User, ListingItem } from '../../types/user';
+import EditProfileView from '../../components/edit_profile_user';
 import Navbar from '../../components/navbar';
 import Footer from '../../components/footer';
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, getDoc, collection, getDocs, updateDoc } from "firebase/firestore";
-import { db } from "../../firebaseConfig"; // Adjust path if needed
+import { db } from "../../firebaseConfig";
 
 interface UserProfileViewProps {
   user: User;
@@ -43,6 +43,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [firebaseListings, setFirebaseListings] = useState<ListingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalLikes, setTotalLikes] = useState(0);
 
   const handleEditProfile = () => {
     setShowEditProfile(true);
@@ -52,7 +53,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     const currentUser = getAuth().currentUser;
     if (!currentUser || !firebaseUser) return;
 
-    // Find only changed fields
     const changedFields: Partial<User> = {};
     Object.keys(updatedUser).forEach((key) => {
       // @ts-ignore
@@ -62,7 +62,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
       }
     });
 
-    // If no changes, just close the edit view
     if (Object.keys(changedFields).length === 0) {
       setShowEditProfile(false);
       return;
@@ -70,7 +69,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
     try {
       await updateDoc(doc(db, "users", currentUser.uid), changedFields);
-      // Refetch user data after update
       const docSnap = await getDoc(doc(db, "users", currentUser.uid));
       if (docSnap.exists()) {
         setFirebaseUser(docSnap.data() as User);
@@ -81,56 +79,69 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     }
   };
 
-  const filteredListings = listings.filter(item =>
-    item.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredListings = firebaseListings
+    .filter(item => !item.sold) // Handles undefined, null, and false
+    .filter(item =>
+      item.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-  const getTimeSinceJoined = (joinDate: string) => {
-    const now = new Date();
-    const joined = new Date(joinDate);
-    const diffTime = Math.abs(now.getTime() - joined.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const years = Math.floor(diffDays / 365);
-    const remainingDays = diffDays % 365;
-    return `${years}y ${remainingDays}d`;
-  };
-
-  const getItemEmoji = (category: string): string => {
-    const emojiMap: { [key: string]: string } = {
-      'tops': '👕',
-      'bottoms': '👖',
-      'dresses': '👗',
-      'outerwear': '🧥',
-      'shoes': '👠',
-      'accessories': '👜',
-    };
-    return emojiMap[category] || '👔';
+  const getTotalLikes = async () => {
+    // Fetch all favorites collections and count how many times user's items appear
+    const favoritesSnapshot = await getDocs(collection(db, "favorites"));
+    let totalLikes = 0;
+    favoritesSnapshot.forEach(userFavDoc => {
+      const itemsRef = collection(db, "favorites", userFavDoc.id, "items");
+      // For each user's favorites, check if any item matches user's listings
+      // You may want to batch this for performance in production
+      firebaseListings.forEach(async (listing) => {
+        const favItemSnap = await getDoc(doc(itemsRef, listing.id));
+        if (favItemSnap.exists()) {
+          totalLikes += 1;
+        }
+      });
+    });
+    return totalLikes;
   };
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      setLoading(true);
-      const currentUser = getAuth().currentUser;
-      if (!currentUser) {
+    const unsubscribe = onAuthStateChanged(getAuth(), (currentUser) => {
+      if (currentUser) {
+        // Fetch user info
+        getDoc(doc(db, "users", currentUser.uid)).then(userDoc => {
+          if (userDoc.exists()) {
+            setFirebaseUser(userDoc.data() as User);
+          }
+        });
+
+        // Fetch products where sellerId == currentUser.uid
+        getDocs(collection(db, "products")).then(productsSnapshot => {
+          const productsArr: ListingItem[] = [];
+          productsSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.sellerId === currentUser.uid) {
+              productsArr.push({ id: doc.id, ...data } as ListingItem);
+            }
+          });
+          setFirebaseListings(productsArr);
+          setLoading(false);
+        });
+      } else {
         setLoading(false);
-        return;
       }
-      // Fetch user profile
-      const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-      if (userDoc.exists()) {
-        setFirebaseUser(userDoc.data() as User);
-      }
-      // Fetch user listings
-      const listingsSnapshot = await getDocs(collection(db, "users", currentUser.uid, "listings"));
-      const listingsArr: ListingItem[] = [];
-      listingsSnapshot.forEach(doc => {
-        listingsArr.push({ id: doc.id, ...doc.data() } as ListingItem);
-      });
-      setFirebaseListings(listingsArr);
-      setLoading(false);
-    };
-    fetchUserData();
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const fetchLikes = async () => {
+      const likes = await getTotalLikes();
+      setTotalLikes(likes);
+    };
+    if (firebaseListings.length > 0) {
+      fetchLikes();
+    }
+  }, [firebaseListings]);
 
   if (showEditProfile) {
     return (
@@ -146,206 +157,412 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
     );
   }
 
-  // Minimal styles object for demonstration
-  const styles: any = {
-    userProfileView: { minHeight: "100vh", background: "#f5f5f5", display: "flex", flexDirection: "column" },
-    profileHeaderBg: {},
-    container: { maxWidth: 4000, margin: "0 auto", padding: 120, flex: 1 },
-    profileCard: {
-      background: "#fff",
-      borderRadius: 16,
-      padding: 160,                // <-- much larger padding
-      boxShadow: "0 2px 16px #eee",
-      marginBottom: 48,
-      maxWidth: 3800,              // <-- much wider card
-      width: "100%",
-      marginLeft: "auto",
-      marginRight: "auto"
-    },
-    profileInfoSection: { display:"flex", alignItems: "center", marginBottom: 16 },
-    profileAvatar: { marginRight: 24 },
-    avatarImage: { width: 80, height: 80, borderRadius: "50%", objectFit: "cover" },
-    avatarPlaceholder: { width: 80, height: 80, borderRadius: "50%", background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 },
-    profileDetails: {},
-    profileUsername: { fontWeight: "bold", fontSize: 20 },
-    profileDetailsLink: { background: "none", border: "none", color: "#2196f3", cursor: "pointer", fontSize: 14, marginTop: 4 },
-    profileStats: { display: "flex", gap: 32, marginTop: 16 },
-    statItem: {},
-    statValue: { fontWeight: "bold", fontSize: 18 },
-    statLabel: { color: "#888", fontSize: 14 },
-    editProfileButton: { background: "#222", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontWeight: 500, fontSize: 16, cursor: "pointer", marginTop: 16 },
-    navigationTabs: { display: "flex", gap: 12, marginBottom: 24 },
-    navTab: { background: "#eee", border: "none", borderRadius: 6, padding: "8px 18px", fontWeight: 500, fontSize: 16, cursor: "pointer" },
-    navTabActive: { background: "#222", color: "#fff" },
-    contentSection: {},
-    sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-    sectionTitle: { fontSize: 20, fontWeight: "bold" },
-    manageListingsLink: { background: "#fff", border: "1px solid #222", borderRadius: 6, padding: "6px 14px", fontWeight: 500, fontSize: 14, cursor: "pointer" },
-    searchFilters: { display: "flex", gap: 12, marginBottom: 16 },
-    searchInput: { flex: 1, padding: 8, borderRadius: 4, border: "1px solid #ccc", fontSize: 15 },
-    filtersButton: { background: "#eee", border: "none", borderRadius: 6, padding: "8px 18px", fontWeight: 500, fontSize: 16, cursor: "pointer" },
-    listingsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24 },
-    listingItem: { background: "#fff", borderRadius: 8, boxShadow: "0 1px 4px #eee", padding: 16, display: "flex", flexDirection: "column", alignItems: "center" },
-    listingImage: { fontSize: 40, marginBottom: 8 },
-    buyerProtection: { fontSize: 12, color: "#2196f3", marginTop: 4 },
-    listingInfo: { textAlign: "center" },
-    listingTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
-    listingPrice: { color: "#222", fontWeight: "bold", marginBottom: 4 },
-    listingCondition: { color: "#888", fontSize: 13 },
-    emptyListings: { textAlign: "center", padding: 32, background: "#fff", borderRadius: 8, boxShadow: "0 1px 4px #eee" },
-    emptyIcon: { fontSize: 48, marginBottom: 12 },
-    emptyTitle: { fontWeight: "bold", fontSize: 20 },
-    emptySubtitle: { color: "#888", marginBottom: 12 },
-    emptyStats: { display: "flex", gap: 12, justifyContent: "center", marginBottom: 12 },
-    viewInsightsLink: { background: "#eee", border: "none", borderRadius: 6, padding: "8px 18px", fontWeight: 500, fontSize: 16, cursor: "pointer", marginRight: 8 },
-    promoteButton: { background: "#222", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontWeight: 500, fontSize: 16, cursor: "pointer" },
-    insightsStats: { display: "flex", gap: 24 },
-    insightCard: { background: "#fff", borderRadius: 8, boxShadow: "0 1px 4px #eee", padding: 16, flex: 1, textAlign: "center" },
-    insightValue: { fontWeight: "bold", fontSize: 20 },
-    noReviews: { textAlign: "center", padding: 32, background: "#fff", borderRadius: 8, boxShadow: "0 1px 4px #eee" },
-    reviewsList: {},
-    reviewSummary: { textAlign: "center", marginBottom: 16 },
-    ratingDisplay: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8 },
-    ratingValue: { fontWeight: "bold", fontSize: 20 },
-    ratingStars: { color: "#FFD700", fontSize: 18 }
-  };
-
   const userData = firebaseUser || user;
 
   return (
-    <div style={styles.userProfileView}>
+    <div style={{
+      minHeight: "100vh",
+      background: "#f8f9fa",
+      display: "flex",
+      flexDirection: "column"
+    }}>
       <Navbar />
-      <div style={styles.profileHeaderBg}></div>
-      <div style={styles.container}>
+
+      <div style={{
+        maxWidth: 900,
+        margin: "0 auto",
+        padding: "40px 0 0 0",
+        flex: 1
+      }}>
         {/* Profile Card */}
-        <div style={styles.profileCard}>
-          <div style={styles.profileInfoSection}>
-            <div style={styles.profileAvatar}>
-              {userData.profilePhotoUrl ? (
-                <img src={userData.profilePhotoUrl} alt="Profile" style={styles.avatarImage} />
-              ) : (
-                <div style={styles.avatarPlaceholder}>
-                  {/* 🎃 */}
+        <div style={{
+          background: "#fff",
+          borderRadius: 16,
+          padding: "100px 120px 60px 120px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          marginBottom: 24,
+          maxWidth: 1100,
+          marginLeft: "auto",
+          marginRight: "auto",
+          textAlign: "left",
+          display: "flex",
+          flexDirection: "column",
+          gap: 20
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <div>
+                {userData.profilePhotoUrl ? (
+                <img
+                  src={userData.profilePhotoUrl}
+                  alt="Profile"
+                  style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: "50%",
+                  objectFit: "cover"
+                  }}
+                />
+                ) : (
+                <div style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: "50%",
+                  background: "#e9ecef",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 24,
+                  color: "#6c757d"
+                }}>
+                  👤
                 </div>
-              )}
+                )}
             </div>
-            <div style={styles.profileDetails}>
-              <div style={styles.profileUsername}>@{userData.username}</div>
-            </div>
-          </div>
-          <div style={styles.profileStats}>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>
-                {userData.reviewCount > 0 ? userData.rating : 'N/A'}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 2 }}>
+                @{userData.username || "username"}
+              </div>
+              <div style={{ color: "#888", fontSize: 15 }}>
+                📍{userData.region || "state"}
+              </div>
+              <div style={{ color: "#888", fontSize: 15, marginTop: 2 }}>
+                {userData.bio || "No bio available."}
               </div>
             </div>
-            <div style={styles.statItem}>
-              <div style={styles.statValue}>{getTimeSinceJoined(userData.joinDate)}</div>
-              <div style={styles.statLabel}>Joined</div>
+            <div style={{ flex: 1 }} />
+            <button
+              style={{
+                background: "#212529",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "10px 20px",
+                fontWeight: "500",
+                fontSize: 15,
+                cursor: "pointer",
+                marginLeft: "auto"
+              }}
+              onClick={handleEditProfile}
+            >
+              Edit Profile
+            </button>
+          </div>
+          <div style={{
+            display: "flex",
+            gap: 32,
+            marginTop: 18,
+            marginBottom: 0
+          }}>
+            <div style={{ textAlign: "center", flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, color: "#212529" }}>
+                1months
+              </div>
+              <div style={{ color: "#888", fontSize: 14 }}>
+                Joined
+              </div>
+            </div>
+            <div style={{ textAlign: "center", flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, color: "#212529" }}>
+                {firebaseListings.length}
+              </div>
+              <div style={{ color: "#888", fontSize: 14 }}>
+                Active Listings
+              </div>
             </div>
           </div>
-          <button style={styles.editProfileButton} onClick={handleEditProfile}>
-            Edit Profile
-          </button>
         </div>
 
-        {/* Navigation Tabs */}
-        <div style={styles.navigationTabs}>
-          <button 
-            style={{...styles.navTab, ...(activeTab === 'listings' ? styles.navTabActive : {})}}
+        {/* Tabs */}
+        <div style={{
+          display: "flex",
+          gap: 0,
+          marginBottom: 16,
+          background: "#fff",
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+          maxWidth: 1100,
+          marginLeft: "auto",
+          marginRight: "auto",
+        }}>
+          <button
+            style={{
+              background: activeTab === 'listings' ? "#212529" : "#fff",
+              color: activeTab === 'listings' ? "#fff" : "#212529",
+              border: "none",
+              padding: "14px 0",
+              fontWeight: "500",
+              fontSize: 15,
+              cursor: "pointer",
+              flex: 1,
+              transition: "all 0.2s"
+            }}
             onClick={() => setActiveTab('listings')}
           >
             Listings
           </button>
-          <button 
-            style={{...styles.navTab, ...(activeTab === 'insights' ? styles.navTabActive : {})}}
+          <button
+            style={{
+              background: activeTab === 'insights' ? "#212529" : "#fff",
+              color: activeTab === 'insights' ? "#fff" : "#212529",
+              border: "none",
+              padding: "14px 0",
+              fontWeight: "500",
+              fontSize: 15,
+              cursor: "pointer",
+              flex: 1,
+              transition: "all 0.2s",
+            }}
             onClick={() => setActiveTab('insights')}
           >
             Insights
           </button>
         </div>
 
-        {/* Content Section */}
-        <div style={styles.contentSection}>
-          {activeTab === 'listings' && (
-            <div>
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>Listings</h2>
-                <button style={styles.manageListingsLink}>Manage listings</button>
-              </div>
-              
-              <div style={styles.searchFilters}>
-                <input 
-                  type="text" 
-                  style={styles.searchInput}
-                  placeholder="Search listings..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <button style={styles.filtersButton}>
-                  Filters ⚙️
+        {/* Listings Section */}
+        {activeTab === 'listings' && (
+          <div style={{
+            background: "#fff",
+            borderRadius: 8,
+            boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+            padding: "24px",
+            maxWidth: 1100,
+            marginLeft: "auto",
+            marginRight: "auto",
+            marginBottom: 40
+          }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16
+            }}>
+              <h3 style={{
+                fontSize: 16,
+                fontWeight: "600",
+                margin: 0,
+                color: "#212529"
+              }}>
+                Listings ({firebaseListings.length} active)
+              </h3>
+                <button 
+                style={{
+                  background: "#fff",
+                  border: "1px solid #dee2e6",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  fontWeight: "500",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  color: "#212529"
+                }}
+                onClick={() => window.location.href = '/manage_listings'}
+                >
+                Manage listings
                 </button>
-              </div>
-
-              {filteredListings.length > 0 ? (
-                <div style={styles.listingsGrid}>
-                  {filteredListings.map((item) => (
-                    <div key={item.id} style={styles.listingItem}>
-                      <div style={styles.listingImage}>
-                        {getItemEmoji(item.category)}
-                        <div style={styles.buyerProtection}>Buyer Protection</div>
+            </div>
+            <div style={{
+              display: "flex",
+              gap: 12,
+              marginBottom: 16
+            }}>
+              <input
+                type="text"
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  border: "1px solid #dee2e6",
+                  fontSize: 14,
+                  outline: "none",
+                  color: "#212529"
+                }}
+                placeholder="Search listings..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <button style={{
+                background: "#f8f9fa",
+                border: "1px solid #dee2e6",
+                borderRadius: 6,
+                padding: "10px 18px",
+                fontWeight: "500",
+                fontSize: 14,
+                cursor: "pointer",
+                color: "#212529"
+              }}>
+                Filters ⚙️
+              </button>
+            </div>
+            {filteredListings.length > 0 ? (
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 18
+              }}>
+                {filteredListings.map((item) => (
+                  <div key={item.id} style={{
+                    background: "#fff",
+                    borderRadius: 8,
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    transition: "transform 0.2s"
+                  }}>
+                    <div style={{
+                      height: 180,
+                      background: "#f8f9fa",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 48,
+                      color: "#dee2e6"
+                    }}>
+                      {(item.images && item.images[0]) ? (
+                        <img src={item.images[0]} alt={item.title} style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover"
+                        }} />
+                      ) : (
+                        "👕"
+                      )}
+                    </div>
+                    <div style={{ padding: 12 }}>
+                      <h4 style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        margin: "0 0 6px 0",
+                        color: "#212529"
+                      }}>
+                        {item.title || "Sample Item"}
+                      </h4>
+                      <div style={{
+                        color: "#212529",
+                        fontWeight: "600",
+                        fontSize: 15,
+                        marginBottom: 2
+                      }}>
+                        RM{item.price || "0"}
                       </div>
-                      <div style={styles.listingInfo}>
-                        <h3 style={styles.listingTitle}>{item.title}</h3>
-                        <div style={styles.listingPrice}>RM{item.price}</div>
-                        {item.condition && (
-                          <div style={styles.listingCondition}>{item.condition}</div>
-                        )}
+                      <div style={{
+                        color: "#6c757d",
+                        fontSize: 12
+                      }}>
+                        {item.condition || "Good condition"}
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={styles.emptyListings}>
-                  <div style={styles.emptyIcon}>📱</div>
-                  <div style={styles.emptyTitle}>Welcome to SecondStyle!</div>
-                  <div style={styles.emptySubtitle}>Start by creating your first listing</div>
-                  <div style={styles.emptyStats}>
-                    <div>RM0</div>
-                    <div>New</div>
                   </div>
-                  <button style={styles.viewInsightsLink}>📊 View insights</button>
-                  <button style={styles.promoteButton}>Promote</button>
-                </div>
-              )}
-            </div>
-          )}
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                textAlign: "center",
+                padding: "40px 20px",
+                color: "#888"
+              }}>
+                No listings found.
+              </div>
+            )}
+          </div>
+        )}
 
-          {activeTab === 'insights' && (
-            <div>
-              <h2 style={styles.sectionTitle}>Insights</h2>
-              <div style={styles.insightsStats}>
-                <div style={styles.insightCard}>
-                  <h3>Total Views</h3>
-                  <div style={styles.insightValue}>
-                    {listings.reduce((total, item) => total + item.views, 0)}
-                  </div>
+        {/* Insights Section */}
+        {activeTab === 'insights' && (
+          <div style={{
+            background: "#fff",
+            borderRadius: 8,
+            boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+            padding: "24px",
+            maxWidth:1100,
+            marginLeft: "auto",
+            marginRight: "auto",
+            marginBottom: 40
+          }}>
+            <h3 style={{
+              fontSize: 18,
+              fontWeight: "600",
+              marginBottom: 18,
+              color: "#212529"
+            }}>
+              Insights
+            </h3>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 18
+            }}>
+              <div style={{
+                background: "#fff",
+                borderRadius: 8,
+                boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                padding: 18,
+                textAlign: "center"
+              }}>
+                <h4 style={{
+                  margin: "0 0 8px 0",
+                  fontSize: 13,
+                  color: "#6c757d"
+                }}>
+                  Total Likes
+                </h4>
+                <div style={{
+                  fontWeight: "600",
+                  fontSize: 20,
+                  color: "#212529"
+                }}>
+                  {totalLikes}
                 </div>
-                <div style={styles.insightCard}>
-                  <h3>Active Listings</h3>
-                  <div style={styles.insightValue}>
-                    {listings.filter(item => item.status === 'active').length}
-                  </div>
+              </div>
+              <div style={{
+                background: "#fff",
+                borderRadius: 8,
+                boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                padding: 18,
+                textAlign: "center"
+              }}>
+                <h4 style={{
+                  margin: "0 0 8px 0",
+                  fontSize: 13,
+                  color: "#6c757d"
+                }}>
+                  Active Listings
+                </h4>
+                <div style={{
+                  fontWeight: "600",
+                  fontSize: 20,
+                  color: "#212529"
+                }}>
+                  {firebaseListings.length}
                 </div>
-                <div style={styles.insightCard}>
-                  <h3>Total Earnings</h3>
-                  <div style={styles.insightValue}>RM{user.totalEarnings}</div>
+              </div>
+              <div style={{
+                background: "#fff",
+                borderRadius: 8,
+                boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                padding: 18,
+                textAlign: "center"
+              }}>
+                <h4 style={{
+                  margin: "0 0 8px 0",
+                  fontSize: 13,
+                  color: "#6c757d"
+                }}>
+                  Total Earnings
+                </h4>
+                <div style={{
+                  fontWeight: "600",
+                  fontSize: 20,
+                  color: "#212529"
+                }}>
+                  RM{userData.totalEarnings || 0}
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
       <Footer />
     </div>
   );

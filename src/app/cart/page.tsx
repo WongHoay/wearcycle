@@ -82,7 +82,7 @@ export default function CartPage() {
             const info: { [sellerId: string]: { name: string; avatar: string } } = {};
             for (const sellerId of sellerIds) {
                 if (!sellerId) continue;
-                const sellerRef = doc(db, "users", sellerId); // or "sellers"
+                const sellerRef = doc(db, "users", sellerId); 
                 const sellerSnap = await getDoc(sellerRef);
                 if (sellerSnap.exists()) {
                     const data = sellerSnap.data();

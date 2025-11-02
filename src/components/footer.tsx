@@ -1,4 +1,5 @@
 import React from "react";
+import { Mail } from 'lucide-react';
 
 const Footer = () => (
   <footer style={{
@@ -89,7 +90,7 @@ const Footer = () => (
               (e.target as HTMLElement).style.transform = 'translateY(0)';
             }}
           >
-            <span>📧</span>
+            <Mail size={16} />
             wearcycle001@gmail.com
           </a>
         </div>

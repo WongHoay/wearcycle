@@ -563,8 +563,8 @@ export default function CheckoutPage() {
                 params.set('shippingAddress', JSON.stringify({
                   fullName,
                   addressLine1: address,
-                  addressLine2, // New line
-                  city: '', // You might want to add a city field
+                  addressLine2,
+                  city: '',
                   state,
                   postalCode: zipCode,
                   country: 'Malaysia', // Default to Malaysia
