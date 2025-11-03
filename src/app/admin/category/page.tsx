@@ -41,19 +41,17 @@ const AdminCategoriesPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
-  // Remove filter state variables since we're not using filters anymore
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editCategoryName, setEditCategoryName] = useState('');
   const [newBrandName, setNewBrandName] = useState('');
   const [editBrandName, setEditBrandName] = useState('');
-  const [newConditionName, setNewConditionName] = useState(''); // Fixed: Added missing state
+  const [newConditionName, setNewConditionName] = useState('');
   const [editConditionName, setEditConditionName] = useState('');
   const [allBrands, setAllBrands] = useState<BrandWithCount[]>([]);
   const [allConditions, setAllConditions] = useState<ConditionWithCount[]>([]);
 
   useEffect(() => {
     fetchCategories();
-    fetchBrandsAndConditions();
   }, []);
 
   const fetchCategories = async () => {
@@ -72,6 +70,7 @@ const AdminCategoriesPage = () => {
       } as Product));
       
       setProducts(productsData); // Store products for filtering
+      fetchBrandsAndConditions(productsData); // Pass productsData directly
 
       const productCounts: { [key: string]: number } = {};
       productsData.forEach(product => {
@@ -95,13 +94,13 @@ const AdminCategoriesPage = () => {
     }
   };
 
-  const fetchBrandsAndConditions = async () => {
+  const fetchBrandsAndConditions = async (productsData: Product[]) => {
     try {
       // Fetch all brands from the brands collection
       const brandsSnapshot = await getDocs(collection(db, 'brands'));
       const brandsWithCounts = brandsSnapshot.docs.map(doc => {
         const name = doc.data().name;
-        const productCount = products.filter(p => p.brand === name).length;
+        const productCount = productsData.filter(p => p.brand === name).length;
         return { name, productCount };
       });
 
@@ -109,7 +108,7 @@ const AdminCategoriesPage = () => {
       const conditionsSnapshot = await getDocs(collection(db, 'conditions'));
       const conditionsWithCounts = conditionsSnapshot.docs.map(doc => {
         const name = doc.data().name;
-        const productCount = products.filter(p => p.condition === name).length;
+        const productCount = productsData.filter(p => p.condition === name).length;
         return { name, productCount };
       });
 
@@ -217,14 +216,13 @@ const AdminCategoriesPage = () => {
       alert('Brand added successfully!');
       setShowAddBrandModal(false);
       setNewBrandName('');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error adding brand:', error);
       alert('Error adding brand. Please try again.');
     }
   };
 
-  // Fixed: Added missing handleAddCondition function
   const handleAddCondition = async () => {
     if (!newConditionName.trim()) {
       alert('Please enter a condition name');
@@ -246,7 +244,7 @@ const AdminCategoriesPage = () => {
       alert('Condition added successfully!');
       setShowAddConditionModal(false);
       setNewConditionName('');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error adding condition:', error);
       alert('Error adding condition. Please try again.');
@@ -254,7 +252,6 @@ const AdminCategoriesPage = () => {
   };
 
   const handleDeleteBrand = async (brand: BrandWithCount) => {
-    // Check if brand is being used in products
     if (brand.productCount > 0) {
       if (!confirm(`This brand is used in ${brand.productCount} product(s). Are you sure you want to delete it? This action cannot be undone.`)) {
         return;
@@ -269,7 +266,7 @@ const AdminCategoriesPage = () => {
       const brandId = brand.name.toLowerCase().replace(/\s+/g, '-');
       await deleteDoc(doc(db, 'brands', brandId));
       alert('Brand deleted successfully!');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error deleting brand:', error);
       alert('Error deleting brand. Please try again.');
@@ -277,7 +274,6 @@ const AdminCategoriesPage = () => {
   };
 
   const handleDeleteCondition = async (condition: ConditionWithCount) => {
-    // Check if condition is being used in products
     if (condition.productCount > 0) {
       if (!confirm(`This condition is used in ${condition.productCount} product(s). Are you sure you want to delete it? This action cannot be undone.`)) {
         return;
@@ -292,7 +288,7 @@ const AdminCategoriesPage = () => {
       const conditionId = condition.name.toLowerCase().replace(/\s+/g, '-');
       await deleteDoc(doc(db, 'conditions', conditionId));
       alert('Condition deleted successfully!');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error deleting condition:', error);
       alert('Error deleting condition. Please try again.');
@@ -305,7 +301,6 @@ const AdminCategoriesPage = () => {
       return;
     }
 
-    // Check if new brand name already exists (and it's different from current)
     if (editBrandName.trim() !== selectedBrand && 
         allBrands.some(brand => brand.name.toLowerCase() === editBrandName.trim().toLowerCase())) {
       alert('This brand name already exists');
@@ -316,18 +311,13 @@ const AdminCategoriesPage = () => {
       const oldBrandId = selectedBrand.toLowerCase().replace(/\s+/g, '-');
       const newBrandId = editBrandName.toLowerCase().replace(/\s+/g, '-');
       
-      // If the ID changes, we need to create a new document and delete the old one
       if (oldBrandId !== newBrandId) {
-        // Create new brand document
         await setDoc(doc(db, 'brands', newBrandId), {
           name: editBrandName.trim(),
           createdAt: new Date()
         });
-        
-        // Delete old brand document
         await deleteDoc(doc(db, 'brands', oldBrandId));
       } else {
-        // Update existing document
         await updateDoc(doc(db, 'brands', oldBrandId), {
           name: editBrandName.trim()
         });
@@ -337,7 +327,7 @@ const AdminCategoriesPage = () => {
       setShowEditBrandModal(false);
       setSelectedBrand(null);
       setEditBrandName('');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error updating brand:', error);
       alert('Error updating brand. Please try again.');
@@ -350,7 +340,6 @@ const AdminCategoriesPage = () => {
       return;
     }
 
-    // Check if new condition name already exists (and it's different from current)
     if (editConditionName.trim() !== selectedCondition && 
         allConditions.some(condition => condition.name.toLowerCase() === editConditionName.trim().toLowerCase())) {
       alert('This condition name already exists');
@@ -361,18 +350,13 @@ const AdminCategoriesPage = () => {
       const oldConditionId = selectedCondition.toLowerCase().replace(/\s+/g, '-');
       const newConditionId = editConditionName.toLowerCase().replace(/\s+/g, '-');
       
-      // If the ID changes, we need to create a new document and delete the old one
       if (oldConditionId !== newConditionId) {
-        // Create new condition document
         await setDoc(doc(db, 'conditions', newConditionId), {
           name: editConditionName.trim(),
           createdAt: new Date()
         });
-        
-        // Delete old condition document
         await deleteDoc(doc(db, 'conditions', oldConditionId));
       } else {
-        // Update existing document
         await updateDoc(doc(db, 'conditions', oldConditionId), {
           name: editConditionName.trim()
         });
@@ -382,7 +366,7 @@ const AdminCategoriesPage = () => {
       setShowEditConditionModal(false);
       setSelectedCondition(null);
       setEditConditionName('');
-      fetchBrandsAndConditions();
+      fetchBrandsAndConditions(products);
     } catch (error) {
       console.error('Error updating condition:', error);
       alert('Error updating condition. Please try again.');
@@ -457,85 +441,97 @@ const AdminCategoriesPage = () => {
         </div>
       </div>
 
-      {/* -Brands Table- */}
+      {/* Brands Table - Single scrollable table */}
       <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: 30 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-              <th style={{ padding: '16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>
-                All Brands ({allBrands.length})
-              </th>
-              <th style={{ padding: '16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Product Count</th>
-              <th style={{ padding: '16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allBrands.length === 0 ? (
-              <tr>
-                <td colSpan={3} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>
-                  No brands available.
-                </td>
-              </tr>
-            ) : (
-              allBrands.map(brand => (
-                <tr key={brand.name} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '16px', color: '#1f2937', fontWeight: 600, fontSize: '1rem' }}>
-                    {brand.name}
-                  </td>
-                  <td style={{ padding: '16px', color: '#6b7280' }}>
-                    <span style={{
-                      padding: '4px 12px',
-                      background: '#f3f4f6',
-                      borderRadius: 12,
-                      fontSize: '0.9rem',
-                      fontWeight: 500
-                    }}>
-                      {brand.productCount} products
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        onClick={() => {
-                          setSelectedBrand(brand.name);
-                          setEditBrandName(brand.name);
-                          setShowEditBrandModal(true);
-                        }}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#3b82f6',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                          fontSize: '0.85rem',
-                          fontWeight: 500
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBrand(brand)}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#ef4444',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                          fontSize: '0.85rem',
-                          fontWeight: 500
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        {/* Fixed header */}
+        <div style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', fontWeight: 600, color: '#374151' }}>
+          <div style={{padding:'16px', textAlign: 'left', fontWeight: 600, color: '#374151', flex: '1' }}>
+            All Brands ({allBrands.length})
+          </div>
+          <div style={{textAlign: 'left', padding: '16px', fontWeight: 600, color: '#374151', flex: '1' }}>
+            Product Count
+          </div>
+          <div style={{textAlign: 'left', padding: '16px',fontWeight: 600, color: '#374151', flex: '1' }}>
+            Actions
+          </div>
+        </div>
+        
+        {allBrands.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>
+            No brands available.
+          </div>
+        ) : (
+          /* Scrollable content area - shows ~10 brands height, scroll to see more */
+          <div style={{
+            maxHeight: '600px', // Height for approximately 10 rows (60px each)
+            overflowY: 'auto',
+            overflowX: 'hidden'
+          }}>
+            {allBrands.map(brand => (
+              <div key={brand.name} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                borderBottom: '1px solid #e5e7eb', 
+                padding: '16px',
+                minHeight: '60px',
+                backgroundColor: 'white'
+              }}>
+                <div style={{ flex: '1', color: '#1f2937', fontWeight: 600, fontSize: '1rem' }}>
+                  {brand.name}
+                </div>
+                <div style={{ flex: '1', textAlign: 'left', color: '#6b7280' }}>
+                  <span style={{
+                    padding: '4px 12px',
+                    background: '#f3f4f6',
+                    borderRadius: 12,
+                    fontSize: '0.9rem',
+                    fontWeight: 500
+                  }}>
+                    {brand.productCount} products
+                  </span>
+                </div>
+                <div style={{ flex: '1', textAlign: 'left', paddingLeft: '16px' }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        setSelectedBrand(brand.name);
+                        setEditBrandName(brand.name);
+                        setShowEditBrandModal(true);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 500
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBrand(brand)}
+                      style={{
+                        padding: '8px 16px',
+                        background: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 500
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Conditions Table */}
