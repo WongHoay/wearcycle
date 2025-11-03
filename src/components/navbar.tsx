@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Heart, ShoppingBag, User, ExternalLink, Grid, List, Settings, Bell } from 'lucide-react';
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signOut } from 'firebase/auth';
 import { db } from '../firebaseConfig';
 
 interface Notification {
@@ -181,6 +181,14 @@ const Navbar: React.FC = () => {
   };
 
   const user = getCurrentUser();
+
+  const handleLogout = async () => {
+    const auth = getAuth();
+    await signOut(auth);
+    // Optionally clear any local state, context, or storage
+    // Redirect to login or homepage
+    window.location.href = "/login"; 
+  };
 
   return (
     <nav style={{ backgroundColor: "#c9a26d" }} >
@@ -481,6 +489,7 @@ const Navbar: React.FC = () => {
             <button
               className="text-amber-800 hover:text-amber-900 transition-colors p-1"
               style={{ background: "none", border: "none", cursor: "pointer" }}
+              onClick={handleLogout}
             >
               <ExternalLink size={20} />
             </button>

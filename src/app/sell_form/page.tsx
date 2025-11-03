@@ -4,7 +4,7 @@ import axios from "axios";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
 import { db } from "../../firebaseConfig";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dez1qts8e/upload";
@@ -45,6 +45,8 @@ const SellFormPage: React.FC = () => {
     const [categories, setCategories] = useState<string[]>([]);
     const [conditions, setConditions] = useState<string[]>([]);
     const [brands, setBrands] = useState<string[]>([]);
+    const [isSuspended, setIsSuspended] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     // Fetch categories, conditions, brands from Firestore
     useEffect(() => {
@@ -83,6 +85,29 @@ const SellFormPage: React.FC = () => {
             }
         };
         fetchOptions();
+    }, []);
+
+    useEffect(() => {
+        const auth = getAuth();
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user) {
+                setIsLoggedIn(true);
+                const checkSuspended = async () => {
+                    const userRef = doc(db, "users", user.uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        if (userData.suspended === true) {
+                            setIsSuspended(true);
+                        }
+                    }
+                };
+                checkSuspended();
+            } else {
+                setIsLoggedIn(false);
+            }
+        });
+        return () => unsubscribe();
     }, []);
 
     const updatePreviews = (files: File[]) => {
@@ -200,7 +225,10 @@ const SellFormPage: React.FC = () => {
             try {
                 const auth = getAuth();
                 const user = auth.currentUser;
-                if (!user) throw new Error("User not authenticated");
+                if (!user) {
+                    setIsLoggedIn(false);
+                    return;
+                }
 
                 // Upload images to Cloudinary
                 const imageUrls = await handleCloudinaryUpload(images);
@@ -256,6 +284,90 @@ const SellFormPage: React.FC = () => {
         setDefectPreview("");
     };
 
+    if (!isLoggedIn) {
+        return (
+            <div style={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                background: "#f5f5f5",
+            }}>
+                <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                    <Navbar />
+                </div>
+                <div style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    <div style={{
+                        background: "#fff",
+                        padding: "32px",
+                        borderRadius: "12px",
+                        boxShadow: "0 2px 16px #aaa",
+                        textAlign: "center",
+                        minWidth: "320px"
+                    }}>
+                        <h2 style={{ color: "#c9a26d", marginBottom: "16px" }}>Login Required</h2>
+                        <p style={{ color: "#222", fontWeight: "bold", marginBottom: "24px" }}>
+                            Please login or create an account to sell items.
+                        </p>
+                        <button
+                            onClick={() => window.location.href = '/login'}
+                            style={{
+                                padding: "12px 24px",
+                                background: "#c9a26d",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontWeight: "bold",
+                                fontSize: "16px",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Go to Login
+                        </button>
+                    </div>
+                </div>
+                <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                    <Footer />
+                </div>
+            </div>
+        );
+    }
+
+    if (isSuspended) {
+        return (
+            <div style={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                background: "#f5f5f5",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
+                <Navbar />
+                <div style={{
+                    background: "#fff",
+                    padding: "32px",
+                    borderRadius: "12px",
+                    boxShadow: "0 2px 16px #aaa",
+                    textAlign: "center",
+                    minWidth: "320px",
+                    marginTop: "48px"
+                }}>
+                    <h2 style={{ color: "#dc3545", marginBottom: "16px" }}>Account Suspended</h2>
+                    <p style={{ color: "#222", fontWeight: "bold", marginBottom: "24px" }}>
+                        Your account is suspended. You are not allowed to sell items.<br />
+                        Please email <a href="mailto:wearcycle001@gmail.com" style={{ color: "#c9a26d", textDecoration: "underline" }}>wearcycle001@gmail.com</a> to enquire about it.
+                    </p>
+                </div>
+                <Footer />
+            </div>
+        );
+    }
+
     return (
         <div
             style={{
@@ -265,7 +377,10 @@ const SellFormPage: React.FC = () => {
                 background: "#f5f5f5",
             }}
         >
-            <Navbar />
+            {/* Make Navbar full width */}
+            <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                <Navbar />
+            </div>
             {showPopup && (
                 <div
                     style={{
@@ -819,7 +934,10 @@ const SellFormPage: React.FC = () => {
                     </form>
                 </section>
             </main>
-            <Footer />
+            {/* Make Footer full width */}
+            <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                <Footer />
+            </div>
         </div>
     );
 };

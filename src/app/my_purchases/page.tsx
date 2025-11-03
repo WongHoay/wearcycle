@@ -100,33 +100,34 @@ const MyPurchasesPage = () => {
       const ordersArr: Order[] = [];
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        let productName = "";
-        let productImage = "";
         let sellerUsername = "Unknown Seller";
         let sellerProfilePhotoUrl = "/default-avatar.png";
-        let quantity = Array.isArray(data.items) ? data.items.length : 1;
+        let items: Array<{ productName: string; productImage: string }> = [];
 
-        // Fetch product info for the first item
+        // Fetch product info for all items
         if (Array.isArray(data.items) && data.items.length > 0) {
-          const productId = data.items[0];
-          let productData: any = {};
-          try {
-            const prodSnap = await getDoc(doc(db, "products", productId));
-            if (prodSnap.exists()) {
-              productData = prodSnap.data();
-              productName = productData.title || productData.name || "Unknown Product";
-              productImage = productData.images?.[0] || productData.image || "/placeholder.jpg";
-              // Fetch seller info from users table using sellerId from product
-              if (productData.sellerId) {
-                const sellerSnap = await getDoc(doc(db, "users", productData.sellerId));
-                if (sellerSnap.exists()) {
-                  const sellerData = sellerSnap.data();
-                  sellerUsername = sellerData.username || sellerData.name || "Unknown Seller";
-                  sellerProfilePhotoUrl = sellerData.profilePhotoUrl || "/default-avatar.png";
+          for (const productId of data.items) {
+            let productName = "";
+            let productImage = "";
+            try {
+              const prodSnap = await getDoc(doc(db, "products", productId));
+              if (prodSnap.exists()) {
+                const productData = prodSnap.data();
+                productName = productData.title || productData.name || "Unknown Product";
+                productImage = productData.images?.[0] || productData.image || "/placeholder.jpg";
+                // Fetch seller info from users table using sellerId from product
+                if (productData.sellerId) {
+                  const sellerSnap = await getDoc(doc(db, "users", productData.sellerId));
+                  if (sellerSnap.exists()) {
+                    const sellerData = sellerSnap.data();
+                    sellerUsername = sellerData.username || sellerData.name || "Unknown Seller";
+                    sellerProfilePhotoUrl = sellerData.profilePhotoUrl || "/default-avatar.png";
+                  }
                 }
               }
-            }
-          } catch {}
+            } catch {}
+            items.push({ productName, productImage });
+          }
         }
 
         // Build tracking info based on available dates
@@ -151,11 +152,8 @@ const MyPurchasesPage = () => {
           id: docSnap.id,
           status: data.status || "completed",
           total: data.amount || 0,
-          quantity,
-          items: [{
-            productName,
-            productImage
-          }],
+          quantity: items.length,
+          items,
           sellerUsername,
           sellerProfilePhotoUrl,
           shippingAddress: data.shippingAddress,
@@ -243,9 +241,9 @@ const MyPurchasesPage = () => {
         <div style={{
           background: "#fff",
           borderRadius: 12,
-          maxWidth: 1100,
+          maxWidth: 1000,
           width: "100%",
-          maxHeight: "90vh",
+          maxHeight: "80vh",
           overflow: "auto",
           position: "relative"
         }}>
@@ -294,7 +292,7 @@ const MyPurchasesPage = () => {
               marginBottom: 32
             }}>
               <div>
-                <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "black", marginBottom: 8 }}>
                   Order Information
                 </h3>
                 <div style={{ fontSize: "0.9rem", color: "#6b7280", lineHeight: 1.6 }}>
@@ -317,7 +315,7 @@ const MyPurchasesPage = () => {
                 </div>
               </div>
               <div>
-                <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "black", marginBottom: 8 }}>
                   Buyer Information
                 </h3>
                 <div style={{ fontSize: "0.9rem", color: "#6b7280", lineHeight: 1.6 }}>
@@ -330,7 +328,7 @@ const MyPurchasesPage = () => {
             {/* Shipping Address */}
             {(order.shippingAddress || order.orderDetails?.shippingAddress) && (
               <div style={{ marginBottom: 32 }}>
-                <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "black", marginBottom: 8 }}>
                   Shipping Address
                 </h3>
                 <div style={{
@@ -364,7 +362,7 @@ const MyPurchasesPage = () => {
 
             {/* Tracking Information */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "black", marginBottom: 8 }}>
                 Tracking Information
               </h3>
               <div>
@@ -470,7 +468,7 @@ const MyPurchasesPage = () => {
 
             {/* Items Ordered */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "#374151", marginBottom: 16 }}>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "black", marginBottom: 16 }}>
                 Items Ordered
               </h3>
               {order.items?.map((item, index) => (
@@ -484,8 +482,8 @@ const MyPurchasesPage = () => {
                   alignItems: "center"
                 }}>
                   <div style={{
-                    width: 60,
-                    height: 60,
+                    width: 80,
+                    height: 80,
                     borderRadius: 8,
                     overflow: "hidden",
                     background: "#f9fafb",
@@ -529,7 +527,7 @@ const MyPurchasesPage = () => {
                       fontSize: "0.8rem",
                       color: "#6b7280"
                     }}>
-                      Quantity: 1 • RM {(order.total || 0).toFixed(2)}
+                      RM {(order.total || 0).toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -548,8 +546,8 @@ const MyPurchasesPage = () => {
                 onClick={onClose}
                 style={{
                   padding: "10px 20px",
-                  background: "#6b7280",
-                  color: "white",
+                  background: "#c9a26d",
+                  color: "black",
                   border: "none",
                   borderRadius: 6,
                   cursor: "pointer",
@@ -566,6 +564,21 @@ const MyPurchasesPage = () => {
     );
   };
 
+  const getTabCount = (tabKey: string) => {
+    switch (tabKey) {
+      case "toPay":
+        return orders.filter(order => order.status === "toPay").length;
+      case "inProgress":
+        return orders.filter(order => order.status === "inProgress").length;
+      case "completed":
+        return orders.filter(order => order.status === "completed").length;
+      case "cancelled":
+        return orders.filter(order => order.status === "cancelled").length;
+      default:
+        return 0;
+    }
+  };
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -579,73 +592,69 @@ const MyPurchasesPage = () => {
         padding: "24px 20px",
         background: "#f8f9fa"
       }}>
-        {/* Header */}
+        {/* Header styled like manage listings */}
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          marginBottom: 24,
-          gap: 12
+          backgroundColor: 'white',
+          padding: '20px 30px',
+          borderBottom: '1px solid #e9ecef',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 16,
-              cursor: "pointer",
-              color: "#212529"
-            }}
-            onClick={() => router.push("/homepage")}
-          >
-            ←
-          </button>
           <h1 style={{
-            fontSize: 20,
-            fontWeight: "600",
+            fontSize: '24px',
+            fontWeight: 600,
+            color: 'black',
             margin: 0,
-            color: "#212529"
-          }}>
-            My purchases
-          </h1>
+          }}>My Purchases</h1>
         </div>
 
-        {/* Main Container with tabs and orders in the same box */}
+        {/* Tabs styled like manage listings */}
         <div style={{
-          background: "#fff",
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
-          maxWidth: 1100,
-          margin: "0 auto",
-          overflow: "hidden",
-          border: "1px solid #eee"
+          backgroundColor: 'white',
+          borderBottom: '1px solid #e9ecef',
         }}>
-          {/* Tabs */}
           <div style={{
-            display: "flex",
-            borderBottom: "1px solid #e9ecef"
+            display: 'flex',
+            maxWidth: '100%',
+            margin: '0 auto',
+            padding: '0 30px',
+            gap: 0,
           }}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 style={{
-                  background: "none",
-                  border: "none",
-                  color: activeTab === tab.key ? "#8b7355" : "#6c757d",
-                  fontWeight: "500",
-                  fontSize: 17,
-                  padding: "22px 0 16px 0",
-                  borderBottom: activeTab === tab.key ? "2.5px solid #c9a26d" : "2.5px solid transparent",
-                  cursor: "pointer",
                   flex: 1,
-                  textAlign: "center",
-                  transition: "all 0.2s ease"
+                  padding: '15px 20px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: activeTab === tab.key ? '#2c3e50' : '#6c757d',
+                  fontSize: '16px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  borderBottom: activeTab === tab.key ? '3px solid #c49660' : '3px solid transparent',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
                 }}
               >
                 {tab.label}
+                {getTabCount(tab.key) > 0 && ` (${getTabCount(tab.key)})`}
               </button>
             ))}
           </div>
+        </div>
 
+        {/* Main Container with orders and modal (unchanged) */}
+        <div style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          overflow: "hidden",
+          border: "1px solid #eee",
+          borderRadius: 12,
+          background: "#fff"
+        }}>
           {/* Orders Content */}
           {filteredOrders.length === 0 ? (
             <div style={{
@@ -657,30 +666,18 @@ const MyPurchasesPage = () => {
               No active orders
             </div>
           ) : (
-            filteredOrders.map(order => {
-              const item = order.items && order.items[0] ? order.items[0] : {};
-              const productName = item.productName || "Unknown Product";
-              const productImage = item.productImage || "/placeholder.jpg";
-              const deliveryStatus =
-                activeTab === "toPay"
-                  ? "🕒 Awaiting payment"
-                  : activeTab === "inProgress"
-                  ? order.status === "shipping"
-                    ? "📦 Shipping in progress"
-                    : "🚚 Delivery in progress"
-                  : activeTab === "completed"
-                  ? "✅ Delivered"
-                  : activeTab === "cancelled"
-                  ? "❌ Cancelled"
-                  : "";
-              // Seller info (replace with actual seller info if available)
-              const sellerName = order.sellerUsername || "Unknown Seller";
-              const sellerProfilePhotoUrl = order.sellerProfilePic || "/default-avatar.png"; // Add this field if available
-              const quantity = order.items ? order.items.length : 1;
-              const total = order.total || 0;
-
-              return (
-                <div key={order.id} style={{
+            filteredOrders.map((order, idx) => (
+              <div key={order.id}>
+                {/* Divider line above the order content */}
+                {idx > 0 && (
+                  <div style={{
+                    width: "100%",
+                    height: 1,
+                    background: "#e5e7eb",
+                    margin: "0 0 24px 0"
+                  }} />
+                )}
+                <div style={{
                   padding: "32px 40px 32px 40px",
                   display: "flex",
                   flexDirection: "column",
@@ -699,9 +696,17 @@ const MyPurchasesPage = () => {
                       color: "#c9a26d",
                       fontWeight: "600"
                     }}>
-                      {deliveryStatus}
+                      {order.status === "completed" ? "Delivered" : order.status === "inProgress" ? "In Transit" : order.status === "toPay" ? "Payment Pending" : "Order Cancelled"}
                     </span>
                   </div>
+
+                  {/* Divider line */}
+                  <div style={{
+                    width: "100%",
+                    height: "1px",
+                    background: "#e5e7eb",
+                    margin: "0 0 12px 0"
+                  }} />
 
                   {/* Seller */}
                   <div style={{
@@ -711,8 +716,8 @@ const MyPurchasesPage = () => {
                     marginBottom: 18
                   }}>
                     <img
-                      src={sellerProfilePhotoUrl}
-                      alt={sellerName}
+                      src={order.sellerProfilePhotoUrl}
+                      alt={order.sellerUsername}
                       style={{
                         width: 32,
                         height: 32,
@@ -726,36 +731,40 @@ const MyPurchasesPage = () => {
                       fontSize: 16,
                       color: "#212529"
                     }}>
-                      {sellerName}
+                      {order.sellerUsername}
                     </span>
                   </div>
 
-                  {/* Product Row */}
+                  {/* Product Row: Show all products in the order */}
                   <div style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: 18,
+                    flexDirection: "column",
+                    gap: 16,
                     marginBottom: 0
                   }}>
-                    <img
-                      src={productImage}
-                      alt={productName}
-                      style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: 8,
-                        objectFit: "cover"
-                      }}
-                    />
-                    <div style={{
-                      fontWeight: "500",
-                      fontSize: 16,
-                      color: "#212529",
-                      marginBottom: 2,
-                      lineHeight: 1.2
-                    }}>
-                      {productName}
-                    </div>
+                    {order.items?.map((item, idx) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <img
+                          src={item.productImage}
+                          alt={item.productName}
+                          style={{
+                            width: 90,
+                            height: 90,
+                            borderRadius: 8,
+                            objectFit: "cover"
+                          }}
+                        />
+                        <div style={{
+                          fontWeight: "500",
+                          fontSize: 16,
+                          color: "#212529",
+                          marginBottom: 2,
+                          lineHeight: 1.2
+                        }}>
+                          {item.productName}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Bottom Row: Item count, View Details, Total */}
@@ -774,7 +783,7 @@ const MyPurchasesPage = () => {
                         fontSize: 15,
                         color: "#6c757d"
                       }}>
-                        {quantity} item
+                        {order.quantity} item
                       </span>
                       <button
                         onClick={() => handleViewDetails(order)}
@@ -797,23 +806,23 @@ const MyPurchasesPage = () => {
                       fontSize: 18,
                       color: "#212529"
                     }}>
-                      Total: <span style={{ color: "#212529", fontWeight: 700, marginLeft: 8 }}>RM{total.toFixed(2)}</span>
+                      Total: <span style={{ color: "#212529", fontWeight: 700, marginLeft: 8 }}>RM{order.total?.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
-              );
-            })
+              </div>
+            ))
           )}
         </div>
-      </div>
 
-      {/* Order Details Modal */}
-      {showOrderDetails && selectedOrder && (
-        <OrderDetailsModal 
-          order={selectedOrder} 
-          onClose={() => setShowOrderDetails(false)} 
-        />
-      )}
+        {/* Order Details Modal */}
+        {showOrderDetails && selectedOrder && (
+          <OrderDetailsModal 
+            order={selectedOrder} 
+            onClose={() => setShowOrderDetails(false)} 
+          />
+        )}
+      </div>
     </div>
   );
 };

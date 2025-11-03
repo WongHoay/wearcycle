@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Navbar from '../../components/navbar';
 import Footer from '../../components/footer';
 import { getAuth } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, arrayUnion } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { useRouter } from "next/navigation";
 
@@ -47,6 +47,7 @@ export default function ViewItemPage() {
     const [placingBid, setPlacingBid] = useState(false);
     const [bidError, setBidError] = useState<string>("");
     const [highestBidderUsername, setHighestBidderUsername] = useState<string>("");
+    const [isSuspended, setIsSuspended] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -155,6 +156,25 @@ export default function ViewItemPage() {
         };
         fetchItem();
     }, [itemId]);
+
+    useEffect(() => {
+        // Check if user is suspended
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (user) {
+            const checkSuspended = async () => {
+                const userRef = doc(db, "users", user.uid);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    if (userData.suspended === true) {
+                        setIsSuspended(true);
+                    }
+                }
+            };
+            checkSuspended();
+        }
+    }, []);
 
     // Product actions
     const handleAddToCart = async () => {
@@ -423,9 +443,11 @@ export default function ViewItemPage() {
                                         border: "none",
                                         fontWeight: "bold",
                                         fontSize: "1rem",
-                                        cursor: "pointer"
+                                        cursor: isSuspended ? "not-allowed" : "pointer",
+                                        opacity: isSuspended ? 0.5 : 1
                                     }}
                                     onClick={handleAddToCart}
+                                    disabled={isSuspended}
                                 >
                                     Add to Cart
                                 </button>
@@ -439,13 +461,25 @@ export default function ViewItemPage() {
                                         border: "none",
                                         fontWeight: "bold",
                                         fontSize: "1rem",
-                                        cursor: "pointer"
+                                        cursor: isSuspended ? "not-allowed" : "pointer",
+                                        opacity: isSuspended ? 0.5 : 1
                                     }}
                                     onClick={handleBuyNow}
+                                    disabled={isSuspended}
                                 >
                                     Buy Now
                                 </button>
                             </div>
+                            {isSuspended && (
+                                <div style={{
+                                    color: "red",
+                                    fontWeight: "bold",
+                                    marginBottom: "16px",
+                                    fontSize: "1rem"
+                                }}>
+                                    Your account is suspended. You can browse items but cannot buy or add to cart.
+                                </div>
+                            )}
 
                             {/* Product Details */}
                             <div style={{ borderTop: "1px solid #eee", paddingTop: "18px" }}>

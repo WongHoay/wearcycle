@@ -1,12 +1,13 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Camera, AlertCircle } from "lucide-react";
 import Navbar from "../../components/navbar";
 import Footer from "../../components/footer";
-import axios from "axios";
 import { db } from "../../firebaseConfig";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { Camera, AlertCircle } from "lucide-react";
+import axios from "axios";
+import { collection, addDoc, getDocs } from "firebase/firestore";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dez1qts8e/upload";
 const CLOUDINARY_UPLOAD_PRESET = "unsigned_preset";
@@ -41,7 +42,7 @@ const styles = {
     },
 };
 
-function BidForm() {
+const BidFormPage: React.FC = () => {
     const [form, setForm] = useState({
         productName: "",
         description: "",
@@ -60,6 +61,8 @@ function BidForm() {
     const [showPopup, setShowPopup] = useState(false);
     const [categories, setCategories] = useState<string[]>([]);
     const [brands, setBrands] = useState<string[]>([]);
+    const [isSuspended, setIsSuspended] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -69,6 +72,29 @@ function BidForm() {
             setBrands(brandSnap.docs.map(doc => doc.data().name));
         };
         fetchFilters();
+    }, []);
+
+    useEffect(() => {
+        const auth = getAuth();
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user) {
+                setIsLoggedIn(true);
+                const checkSuspended = async () => {
+                    const userRef = doc(db, "users", user.uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        if (userData.suspended === true) {
+                            setIsSuspended(true);
+                        }
+                    }
+                };
+                checkSuspended();
+            } else {
+                setIsLoggedIn(false);
+            }
+        });
+        return () => unsubscribe();
     }, []);
 
     const updatePreviews = (files: File[]) => {
@@ -239,6 +265,90 @@ function BidForm() {
         "XXL / EU56 / UK46 / US46",
         "Free Size"
     ];
+
+    if (!isLoggedIn) {
+        return (
+            <div style={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                background: "#f5f5f5",
+            }}>
+                <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                    <Navbar />
+                </div>
+                <div style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    <div style={{
+                        background: "#fff",
+                        padding: "32px",
+                        borderRadius: "12px",
+                        boxShadow: "0 2px 16px #aaa",
+                        textAlign: "center",
+                        minWidth: "320px"
+                    }}>
+                        <h2 style={{ color: "#c9a26d", marginBottom: "16px" }}>Login Required</h2>
+                        <p style={{ color: "#222", fontWeight: "bold", marginBottom: "24px" }}>
+                            Please login or create an account to bid on items.
+                        </p>
+                        <button
+                            onClick={() => window.location.href = '/login'}
+                            style={{
+                                padding: "12px 24px",
+                                background: "#c9a26d",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontWeight: "bold",
+                                fontSize: "16px",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Go to Login
+                        </button>
+                    </div>
+                </div>
+                <div style={{ width: "100vw", position: "relative", left: "50%", right: "50%", marginLeft: "-50vw", marginRight: "-50vw" }}>
+                    <Footer />
+                </div>
+            </div>
+        );
+    }
+
+    if (isSuspended) {
+        return (
+            <div style={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                background: "#f5f5f5",
+                alignItems: "center",
+                justifyContent: "center"
+            }}>
+                <Navbar />
+                <div style={{
+                    background: "#fff",
+                    padding: "32px",
+                    borderRadius: "12px",
+                    boxShadow: "0 2px 16px #aaa",
+                    textAlign: "center",
+                    minWidth: "320px",
+                    marginTop: "48px"
+                }}>
+                    <h2 style={{ color: "#dc3545", marginBottom: "16px" }}>Account Suspended</h2>
+                    <p style={{ color: "#222", fontWeight: "bold", marginBottom: "24px" }}>
+                        Your account is suspended. You are not allowed to bid on items.<br />
+                        Please email <a href="mailto:wearcycle001@gmail.com" style={{ color: "#c9a26d", textDecoration: "underline" }}>wearcycle001@gmail.com</a> to enquire about it.
+                    </p>
+                </div>
+                <Footer />
+            </div>
+        );
+    }
 
     return (
         <div
@@ -773,4 +883,4 @@ function BidForm() {
     );
 }
 
-export default BidForm;
+export default BidFormPage;

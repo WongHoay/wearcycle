@@ -162,7 +162,14 @@ export default function CartPage() {
             if (user) {
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (userDoc.exists()) {
-                    setUserStatus(userDoc.data().status || "active");
+                    const data = userDoc.data();
+                    if (data.banned === true) {
+                        setUserStatus("banned");
+                    } else if (data.suspended === true) {
+                        setUserStatus("suspended");
+                    } else {
+                        setUserStatus("active");
+                    }
                 }
             }
         };
@@ -171,6 +178,29 @@ export default function CartPage() {
 
     if (loadingUser) {
         return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>;
+    }
+
+    if (userStatus === "banned") {
+        return (
+            <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f5f5f5" }}>
+                <Navbar />
+                <main style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
+                    <div style={{
+                        background: "#fff",
+                        padding: "32px",
+                        borderRadius: "12px",
+                        boxShadow: "0 2px 16px #aaa",
+                        textAlign: "center",
+                        minWidth: "320px"
+                    }}>
+                        <h2 style={{ color: "#c0392b", marginBottom: "16px" }}>Account Banned</h2>
+                        <p style={{ color: "#c0392b", fontWeight: "bold", marginBottom: "24px" }}>
+                            Your account is banned. Please email <a href="mailto:wearcycle001@gmail.com" style={{ color: "#c9a26d", textDecoration: "underline" }}>wearcycle001@gmail.com</a> to enquire about it.
+                        </p>
+                    </div>
+                </main>
+            </div>
+        );
     }
 
     if (userStatus === "suspended") {
@@ -188,7 +218,8 @@ export default function CartPage() {
                     }}>
                         <h2 style={{ color: "#c0392b", marginBottom: "16px" }}>Account Suspended</h2>
                         <p style={{ color: "#c0392b", fontWeight: "bold", marginBottom: "24px" }}>
-                            Your account is suspended. You cannot checkout or purchase items.
+                            Your account is suspended. You cannot checkout or purchase items.<br />
+                            Please email <a href="mailto:wearcycle001@gmail.com" style={{ color: "#c9a26d", textDecoration: "underline" }}>wearcycle001@gmail.com</a> to enquire about it.
                         </p>
                     </div>
                 </main>

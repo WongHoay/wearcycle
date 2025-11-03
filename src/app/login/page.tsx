@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../firebaseConfig"; // Adjust path if needed
+import { auth, db } from "../../firebaseConfig"; // Adjust path if needed
 import { useRouter } from "next/navigation";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -10,11 +11,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
+  const [isSuspended, setIsSuspended] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsSuspended(false);
     if (attempts >= 3) {
       setError("You have reached the maximum number of login attempts. Please reset your password.");
       return;
@@ -27,6 +30,19 @@ export default function Login() {
         setError("Please verify your email before logging in. Check your inbox for the verification email.");
         return;
       }
+      // Check if user is banned or suspended
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        if (userData.banned === true) {
+          setError("Your account is banned. Please email wearcycle001@gmail.com to enquire about it.");
+          return;
+        }
+        if (userData.suspended === true) {
+          setIsSuspended(true);
+        }
+      }
       setAttempts(0); // Reset on successful login
       router.push("/homepage"); 
     } catch (err: any) {
@@ -34,7 +50,7 @@ export default function Login() {
       if (attempts + 1 >= 3) {
         setError("You have reached the maximum number of login attempts. Please reset your password.");
       } else {
-        setError("Login failed. Please check your credentials.");
+        setError("Login failed. Please check your email or password.");
       }
     }
   };
